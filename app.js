@@ -80,7 +80,7 @@ photoInput.addEventListener("change", async () => {
 
     state.items = [...newItems.reverse(), ...state.items];
     photoInput.value = "";
-    uploadFeedback.textContent = `${newItems.length} photos uploaded.`;
+    uploadFeedback.textContent = `${newItems.length}枚アップロードしました。`;
     uploadFeedback.hidden = false;
     uploadCompleteButton.hidden = false;
     renderUploadPreview(newItems);
@@ -88,7 +88,7 @@ photoInput.addEventListener("change", async () => {
     render();
   } catch (error) {
     console.error(error);
-    uploadFeedback.textContent = "Upload failed. Supabase settingsを確認してください。";
+    uploadFeedback.textContent = "アップロードに失敗しました。Supabase設定を確認してください。";
     uploadFeedback.hidden = false;
   }
 });
@@ -108,7 +108,7 @@ sendAllButton.addEventListener("click", async () => {
   const missingItems = waitingItems.filter((item) => !item.price);
   if (missingItems.length) {
     state.missingPriceIds = new Set(missingItems.map((item) => item.id));
-    sendFeedback.textContent = `${missingItems.length} prices missing.`;
+    sendFeedback.textContent = `${missingItems.length}件の金額が未入力です。`;
     sendFeedback.hidden = false;
     renderPricing();
     return;
@@ -116,7 +116,7 @@ sendAllButton.addEventListener("click", async () => {
 
   const sentAt = new Date().toISOString();
   sendAllButton.disabled = true;
-  sendFeedback.textContent = "Sending...";
+  sendFeedback.textContent = "送信中...";
   sendFeedback.hidden = false;
 
   try {
@@ -129,7 +129,7 @@ sendAllButton.addEventListener("click", async () => {
   }
 
   state.missingPriceIds.clear();
-  sendFeedback.textContent = `${waitingItems.length} prices sent. 戻るでトップへ戻れます。`;
+  sendFeedback.textContent = `${waitingItems.length}件の金額を送信しました。戻るでトップへ戻れます。`;
   sendFeedback.hidden = false;
   saveItems();
   renderHomeStatus();
@@ -143,7 +143,7 @@ clearReceivedButton.addEventListener("click", async () => {
   const uncheckedItems = reviewItems.filter((item) => item.status !== "registered");
   if (uncheckedItems.length) {
     state.uncheckedReviewIds = new Set(uncheckedItems.map((item) => item.id));
-    state.reviewMessage = `${uncheckedItems.length} item${uncheckedItems.length === 1 ? "" : "s"} not checked yet.`;
+    state.reviewMessage = `${uncheckedItems.length}件まだチェックされていません。`;
     render();
     alert("まだチェックしていない写真があります。");
     return;
@@ -152,7 +152,7 @@ clearReceivedButton.addEventListener("click", async () => {
 
   state.isClearingReview = true;
   clearReceivedButton.disabled = true;
-  state.reviewMessage = "Clearing...";
+  state.reviewMessage = "削除中...";
   renderReceived();
 
   try {
@@ -169,7 +169,7 @@ clearReceivedButton.addEventListener("click", async () => {
   const deletedIds = new Set(reviewItems.map((item) => item.id));
   state.items = state.items.filter((item) => !deletedIds.has(item.id));
   state.uncheckedReviewIds.clear();
-  state.reviewMessage = "Registered items cleared.";
+  state.reviewMessage = "登録済みの写真を削除しました。";
   state.isClearingReview = false;
   saveItems();
   render();
@@ -379,8 +379,8 @@ function renderHomeStatus() {
   const sentCount = state.items.filter((item) => item.status === "sent").length;
   const registeredCount = state.items.filter((item) => item.status === "registered").length;
 
-  pricingStatus.textContent = waitingCount ? `${waitingCount} uploaded` : "Waiting";
-  receivedStatus.textContent = sentCount + registeredCount ? `${sentCount + registeredCount} ready` : "No notice";
+  pricingStatus.textContent = waitingCount ? `${waitingCount}件あり` : "待機中";
+  receivedStatus.textContent = sentCount + registeredCount ? `${sentCount + registeredCount}件届いています` : "通知なし";
   pricingStatus.closest(".home-card").classList.toggle("has-motion", waitingCount > 0);
   receivedStatus.closest(".home-card").classList.toggle("has-motion", sentCount + registeredCount > 0);
 }
@@ -389,7 +389,7 @@ function renderPricing() {
   const waitingItems = state.items.filter((item) => item.status === "waiting");
   sendAllButton.hidden = waitingItems.length === 0;
   sendAllButton.disabled = false;
-  renderGrid(pricingGrid, waitingItems, "pricing", "No photos waiting for price.");
+  renderGrid(pricingGrid, waitingItems, "pricing", "金額待ちの写真はありません。");
 }
 
 function renderReceived() {
@@ -397,10 +397,10 @@ function renderReceived() {
   noticeBar.hidden = reviewItems.length === 0;
   clearReceivedButton.hidden = reviewItems.length === 0;
   clearReceivedButton.disabled = state.isClearingReview;
-  clearReceivedButton.textContent = state.isClearingReview ? "Clearing..." : "完了";
+  clearReceivedButton.textContent = state.isClearingReview ? "削除中..." : "完了";
   reviewFeedback.hidden = !state.reviewMessage;
   reviewFeedback.textContent = state.reviewMessage;
-  renderGrid(receivedGrid, reviewItems, "received", "No priced photos yet.");
+  renderGrid(receivedGrid, reviewItems, "received", "価格付きの写真はありません。");
 }
 
 function renderGrid(container, items, mode, emptyText) {
@@ -464,7 +464,7 @@ function renderItem(item, mode) {
       priceInput.disabled = true;
       badge.textContent = "Sent";
       badge.classList.add("is-priced");
-      sendFeedback.textContent = `${item.title} sent. 戻るでトップへ戻れます。`;
+      sendFeedback.textContent = `${item.title} を送信しました。戻るでトップへ戻れます。`;
       sendFeedback.hidden = false;
     });
 
@@ -507,7 +507,7 @@ function renderItem(item, mode) {
       item.status = nextStatus;
       item.registeredAt = nextRegisteredAt;
       state.uncheckedReviewIds.delete(item.id);
-      state.reviewMessage = reviewCheckbox.checked ? `${item.title} checked.` : "";
+      state.reviewMessage = reviewCheckbox.checked ? `${item.title} を完了しました。` : "";
 
       try {
         await persistItem(item, { status: nextStatus, registeredAt: nextRegisteredAt });
