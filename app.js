@@ -96,7 +96,7 @@ uploadCompleteButton.addEventListener("click", () => {
   alert("アップロードしました。戻るでトップへ戻れます。");
 });
 
-sendAllButton.addEventListener("click", () => {
+sendAllButton.addEventListener("click", async () => {
   const waitingItems = state.items.filter((item) => item.status === "waiting");
   const missingItems = waitingItems.filter((item) => !item.price);
   if (missingItems.length) {
@@ -108,18 +108,28 @@ sendAllButton.addEventListener("click", () => {
   }
 
   const sentAt = new Date().toISOString();
-  Promise.all(waitingItems.map((item) => persistItem(item, { status: "sent", sentAt }))).catch(console.error);
+  sendAllButton.disabled = true;
+  sendFeedback.textContent = "Sending...";
+  sendFeedback.hidden = false;
+
+  try {
+    await Promise.all(waitingItems.map((item) => persistItem(item, { status: "sent", sentAt })));
+  } catch (error) {
+    console.error(error);
+    sendFeedback.textContent = "送信に失敗しました。もう一度押してください。";
+    sendAllButton.disabled = false;
+    return;
+  }
 
   state.missingPriceIds.clear();
   sendFeedback.textContent = `${waitingItems.length} prices sent. 戻るでトップへ戻れます。`;
   sendFeedback.hidden = false;
-  sendAllButton.disabled = true;
   saveItems();
   renderHomeStatus();
   markPricingAsSent();
 });
 
-clearReceivedButton.addEventListener("click", () => {
+clearReceivedButton.addEventListener("click", async () => {
   const reviewItems = state.items.filter((item) => item.status === "sent" || item.status === "registered");
   const uncheckedItems = reviewItems.filter((item) => item.status !== "registered");
   if (uncheckedItems.length) {
@@ -131,8 +141,23 @@ clearReceivedButton.addEventListener("click", () => {
   }
   if (!confirm("全部チェックしましたか？")) return;
   const registeredItems = state.items.filter((item) => item.status === "registered");
-  deleteCloudItems(registeredItems).catch(console.error);
-  state.items = state.items.filter((item) => item.status !== "registered");
+
+  clearReceivedButton.disabled = true;
+  state.reviewMessage = "Clearing...";
+  renderReceived();
+
+  try {
+    await deleteCloudItems(registeredItems);
+  } catch (error) {
+    console.error(error);
+    state.reviewMessage = "削除に失敗しました。もう一度押してください。";
+    clearReceivedButton.disabled = false;
+    renderReceived();
+    return;
+  }
+
+  const deletedIds = new Set(registeredItems.map((item) => item.id));
+  state.items = state.items.filter((item) => !deletedIds.has(item.id));
   state.uncheckedReviewIds.clear();
   state.reviewMessage = "Registered items cleared.";
   saveItems();
@@ -227,19 +252,15 @@ async function updateCloudItem(item, fields) {
 async function deleteCloudItems(items) {
   if (!state.cloudReady || !items.length) return;
   const photoPaths = items.map((item) => item.photoPath).filter(Boolean);
+  const itemIds = items.map((item) => item.id);
+
+  const { error } = await supabaseClient.from("inventory_items").delete().in("id", itemIds);
+  if (error) throw error;
 
   if (photoPaths.length) {
-    await supabaseClient.storage.from(photoBucket).remove(photoPaths);
+    const { error: storageError } = await supabaseClient.storage.from(photoBucket).remove(photoPaths);
+    if (storageError) console.warn(storageError);
   }
-
-  const { error } = await supabaseClient
-    .from("inventory_items")
-    .delete()
-    .in(
-      "id",
-      items.map((item) => item.id),
-    );
-  if (error) throw error;
 }
 
 async function persistItem(item, fields) {
@@ -459,19 +480,44 @@ function renderItem(item, mode) {
     receivedPrice.hidden = false;
     receivedPrice.textContent = `¥${Number(item.price).toLocaleString("ja-JP")}`;
     reviewCheckbox.checked = isRegistered;
-    reviewCheckbox.addEventListener("change", () => {
-      item.status = reviewCheckbox.checked ? "registered" : "sent";
-      item.registeredAt = reviewCheckbox.checked ? new Date().toISOString() : "";
+    reviewCheckbox.addEventListener("change", async () => {
+      const previousStatus = item.status;
+      const previousRegisteredAt = item.registeredAt;
+      const nextStatus = reviewCheckbox.checked ? "registered" : "sent";
+      const nextRegisteredAt = reviewCheckbox.checked ? new Date().toISOString() : "";
+      reviewCheckbox.disabled = true;
+
+      item.status = nextStatus;
+      item.registeredAt = nextRegisteredAt;
       state.uncheckedReviewIds.delete(item.id);
       state.reviewMessage = reviewCheckbox.checked ? `${item.title} checked.` : "";
-      persistItem(item, { status: item.status, registeredAt: item.registeredAt }).catch(console.error);
-      render();
+
+      try {
+        await persistItem(item, { status: nextStatus, registeredAt: nextRegisteredAt });
+        render();
+      } catch (error) {
+        console.error(error);
+        item.status = previousStatus;
+        item.registeredAt = previousRegisteredAt;
+        state.reviewMessage = "チェックの保存に失敗しました。もう一度押してください。";
+        render();
+      }
     });
   }
 
-  deleteButton.addEventListener("click", () => {
+  deleteButton.addEventListener("click", async () => {
     if (!confirm(`${item.title} を削除しますか？`)) return;
-    deleteCloudItems([item]).catch(console.error);
+    deleteButton.disabled = true;
+
+    try {
+      await deleteCloudItems([item]);
+    } catch (error) {
+      console.error(error);
+      deleteButton.disabled = false;
+      alert("削除に失敗しました。もう一度押してください。");
+      return;
+    }
+
     state.items = state.items.filter((candidate) => candidate.id !== item.id);
     saveItems();
     render();
