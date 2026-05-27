@@ -13,6 +13,7 @@ const state = {
   uncheckedReviewIds: new Set(),
   reviewMessage: "",
   cloudReady: Boolean(supabaseClient),
+  isClearingReview: false,
 };
 
 const screens = {
@@ -131,6 +132,8 @@ sendAllButton.addEventListener("click", async () => {
 
 clearReceivedButton.addEventListener("click", async () => {
   const reviewItems = state.items.filter((item) => item.status === "sent" || item.status === "registered");
+  if (!reviewItems.length) return;
+
   const uncheckedItems = reviewItems.filter((item) => item.status !== "registered");
   if (uncheckedItems.length) {
     state.uncheckedReviewIds = new Set(uncheckedItems.map((item) => item.id));
@@ -140,26 +143,28 @@ clearReceivedButton.addEventListener("click", async () => {
     return;
   }
   if (!confirm("全部チェックしましたか？")) return;
-  const registeredItems = state.items.filter((item) => item.status === "registered");
 
+  state.isClearingReview = true;
   clearReceivedButton.disabled = true;
   state.reviewMessage = "Clearing...";
   renderReceived();
 
   try {
-    await deleteCloudItems(registeredItems);
+    await deleteCloudItems(reviewItems);
   } catch (error) {
     console.error(error);
     state.reviewMessage = "削除に失敗しました。もう一度押してください。";
+    state.isClearingReview = false;
     clearReceivedButton.disabled = false;
     renderReceived();
     return;
   }
 
-  const deletedIds = new Set(registeredItems.map((item) => item.id));
+  const deletedIds = new Set(reviewItems.map((item) => item.id));
   state.items = state.items.filter((item) => !deletedIds.has(item.id));
   state.uncheckedReviewIds.clear();
   state.reviewMessage = "Registered items cleared.";
+  state.isClearingReview = false;
   saveItems();
   render();
 });
@@ -202,6 +207,8 @@ function normalizeItem(item, index) {
 }
 
 async function loadCloudItems() {
+  if (state.isClearingReview) return;
+
   const { data, error } = await supabaseClient
     .from("inventory_items")
     .select("*")
@@ -383,6 +390,8 @@ function renderReceived() {
   const reviewItems = state.items.filter((item) => item.status === "sent" || item.status === "registered");
   noticeBar.hidden = reviewItems.length === 0;
   clearReceivedButton.hidden = reviewItems.length === 0;
+  clearReceivedButton.disabled = state.isClearingReview;
+  clearReceivedButton.textContent = state.isClearingReview ? "Clearing..." : "完了";
   reviewFeedback.hidden = !state.reviewMessage;
   reviewFeedback.textContent = state.reviewMessage;
   renderGrid(receivedGrid, reviewItems, "received", "No priced photos yet.");
@@ -477,6 +486,8 @@ function renderItem(item, mode) {
     card.classList.toggle("is-registered", isRegistered);
     card.classList.toggle("is-unchecked", state.uncheckedReviewIds.has(item.id));
     priceRow.hidden = true;
+    deleteButton.hidden = false;
+    deleteButton.disabled = false;
     receivedPrice.hidden = false;
     receivedPrice.textContent = `¥${Number(item.price).toLocaleString("ja-JP")}`;
     reviewCheckbox.checked = isRegistered;
