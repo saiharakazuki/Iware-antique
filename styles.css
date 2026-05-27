@@ -15,6 +15,10 @@
   box-sizing: border-box;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 [hidden] {
   display: none !important;
 }
@@ -36,6 +40,17 @@ input {
 
 button {
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:disabled,
+input:disabled {
+  cursor: not-allowed;
+}
+
+input {
+  font-size: 16px;
 }
 
 h1,
@@ -204,7 +219,7 @@ main {
 .clear-button,
 .send-all-button,
 .complete-button {
-  min-height: 38px;
+  min-height: 44px;
   padding: 0 13px;
   border-radius: 0;
   font-size: 13px;
@@ -229,6 +244,8 @@ main {
     radial-gradient(circle at 80% 0%, rgba(214, 188, 137, 0.14), transparent 40%),
     var(--panel-soft);
   border: 1px solid var(--line-strong);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .upload-box input {

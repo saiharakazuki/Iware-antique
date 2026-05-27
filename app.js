@@ -14,6 +14,7 @@ const state = {
   reviewMessage: "",
   cloudReady: Boolean(supabaseClient),
   isClearingReview: false,
+  isUploading: false,
 };
 
 const screens = {
@@ -51,34 +52,40 @@ document.querySelectorAll("[data-screen]").forEach((button) => {
 
 photoInput.addEventListener("change", async () => {
   const files = Array.from(photoInput.files || []);
-  if (!files.length) return;
+  if (!files.length || state.isUploading) return;
 
   const nextNumber = state.items.length + 1;
-  uploadFeedback.textContent = "Uploading...";
+  const newItems = [];
+  state.isUploading = true;
+  photoInput.disabled = true;
+  uploadCompleteButton.hidden = true;
+  uploadFeedback.textContent = "アップロードを開始します...";
   uploadFeedback.hidden = false;
 
   try {
-    const newItems = await Promise.all(
-      files.map(async (file, index) => {
-        const photo = await resizeImage(file);
-        const title = `PHOTO ${String(nextNumber + index).padStart(3, "0")}`;
+    for (const [index, file] of files.entries()) {
+      uploadFeedback.textContent = `${index + 1}/${files.length}枚をアップロード中...`;
 
-        if (state.cloudReady) {
-          return uploadCloudItem(file, photo, title);
-        }
+      const photo = await resizeImage(file);
+      const title = `PHOTO ${String(nextNumber + index).padStart(3, "0")}`;
+      const item = state.cloudReady
+        ? await uploadCloudItem(file, photo, title)
+        : {
+            id: crypto.randomUUID(),
+            title,
+            photo,
+            price: "",
+            status: "waiting",
+            createdAt: new Date().toISOString(),
+          };
 
-        return {
-          id: crypto.randomUUID(),
-          title,
-          photo,
-          price: "",
-          status: "waiting",
-          createdAt: new Date().toISOString(),
-        };
-      }),
-    );
+      newItems.unshift(item);
+      state.items = [item, ...state.items];
+      renderUploadPreview(newItems);
+      renderHomeStatus();
+      saveItems();
+    }
 
-    state.items = [...newItems.reverse(), ...state.items];
     photoInput.value = "";
     uploadFeedback.textContent = `${newItems.length}枚アップロードしました。`;
     uploadFeedback.hidden = false;
@@ -88,8 +95,13 @@ photoInput.addEventListener("change", async () => {
     render();
   } catch (error) {
     console.error(error);
-    uploadFeedback.textContent = "アップロードに失敗しました。Supabase設定を確認してください。";
+    uploadFeedback.textContent = newItems.length
+      ? `${newItems.length}枚は保存できました。残りはもう一度試してください。`
+      : "アップロードに失敗しました。通信状態を確認してもう一度試してください。";
     uploadFeedback.hidden = false;
+  } finally {
+    state.isUploading = false;
+    photoInput.disabled = false;
   }
 });
 
@@ -311,12 +323,12 @@ async function dataUrlToBlob(dataUrl) {
 }
 
 function resizeImage(file) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
       const image = new Image();
       image.onload = () => {
-        const maxSize = 1400;
+        const maxSize = 1100;
         const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
         const canvas = document.createElement("canvas");
         canvas.width = Math.round(image.width * scale);
@@ -324,10 +336,12 @@ function resizeImage(file) {
 
         const context = canvas.getContext("2d");
         context.drawImage(image, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL("image/jpeg", 0.82));
+        resolve(canvas.toDataURL("image/jpeg", 0.72));
       };
+      image.onerror = () => reject(new Error("写真を読み込めませんでした。"));
       image.src = reader.result;
     };
+    reader.onerror = () => reject(new Error("写真を読み込めませんでした。"));
     reader.readAsDataURL(file);
   });
 }
