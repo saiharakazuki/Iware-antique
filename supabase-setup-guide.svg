@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1600" viewBox="0 0 1200 1600">
+  <defs>
+    <style>
+      .bg { fill: #080808; }
+      .panel { fill: #111; stroke: rgba(214,188,137,.38); stroke-width: 2; }
+      .panel2 { fill: #151515; stroke: rgba(243,239,231,.14); stroke-width: 2; }
+      .gold { fill: #d6bc89; }
+      .ink { fill: #f3efe7; }
+      .muted { fill: #aaa39a; }
+      .danger { fill: #d46a5d; }
+      .title { font: 300 62px Helvetica, Arial, sans-serif; letter-spacing: 1px; }
+      .h { font: 700 30px Helvetica, Arial, sans-serif; }
+      .body { font: 500 25px Helvetica, Arial, sans-serif; }
+      .small { font: 700 18px Helvetica, Arial, sans-serif; letter-spacing: 2px; }
+      .num { font: 200 58px Helvetica, Arial, sans-serif; }
+      .button { fill: #d6bc89; }
+      .buttonText { fill: #090909; font: 800 22px Helvetica, Arial, sans-serif; }
+      .code { fill: #0b0b0b; stroke: rgba(243,239,231,.14); stroke-width: 1.5; }
+      .codeText { fill: #d6bc89; font: 500 21px "SFMono-Regular", Consolas, monospace; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1200" height="1600"/>
+  <circle cx="980" cy="120" r="300" fill="rgba(214,188,137,.08)"/>
+
+  <rect x="82" y="70" width="82" height="82" class="panel"/>
+  <text x="123" y="122" text-anchor="middle" class="gold" style="font:800 24px Helvetica,Arial;letter-spacing:3px">AZ</text>
+  <text x="190" y="105" class="gold small">SUPABASE SETUP</text>
+  <text x="190" y="170" class="ink title">IWARE antique</text>
+  <text x="86" y="235" class="muted body">この2つだけ取れれば、僕が本番共有できる形に設定します。</text>
+
+  <g transform="translate(80 300)">
+    <rect width="1040" height="190" rx="0" class="panel2"/>
+    <text x="36" y="72" class="gold num">1</text>
+    <text x="120" y="70" class="ink h">Supabaseにログイン</text>
+    <text x="120" y="112" class="muted body">ブラウザで supabase.com を開いてログインします。</text>
+    <rect x="725" y="58" width="240" height="56" rx="0" class="button"/>
+    <text x="845" y="94" text-anchor="middle" class="buttonText">Sign in</text>
+  </g>
+
+  <g transform="translate(80 530)">
+    <rect width="1040" height="210" rx="0" class="panel2"/>
+    <text x="36" y="82" class="gold num">2</text>
+    <text x="120" y="78" class="ink h">New projectを作成</text>
+    <text x="120" y="120" class="muted body">Organizationを選んで、プロジェクト名を入力します。</text>
+    <text x="120" y="158" class="muted body">名前例: iware-antique</text>
+    <rect x="725" y="68" width="240" height="56" rx="0" class="button"/>
+    <text x="845" y="104" text-anchor="middle" class="buttonText">New project</text>
+  </g>
+
+  <g transform="translate(80 780)">
+    <rect width="1040" height="250" rx="0" class="panel2"/>
+    <text x="36" y="84" class="gold num">3</text>
+    <text x="120" y="78" class="ink h">SQL Editorを開く</text>
+    <text x="120" y="120" class="muted body">左メニューの SQL Editor を押します。</text>
+    <text x="120" y="158" class="muted body">僕が作った supabase-schema.sql の中身を貼ります。</text>
+    <rect x="120" y="180" width="520" height="46" class="code"/>
+    <text x="140" y="211" class="codeText">supabase-schema.sql を全部コピー</text>
+    <rect x="725" y="94" width="240" height="56" rx="0" class="button"/>
+    <text x="845" y="130" text-anchor="middle" class="buttonText">Run</text>
+  </g>
+
+  <g transform="translate(80 1070)">
+    <rect width="1040" height="250" rx="0" class="panel2"/>
+    <text x="36" y="84" class="gold num">4</text>
+    <text x="120" y="78" class="ink h">URLとanon keyをコピー</text>
+    <text x="120" y="120" class="muted body">Project Settings → API を開きます。</text>
+    <text x="120" y="158" class="muted body">次の2つをコピーしてください。</text>
+    <rect x="120" y="180" width="360" height="46" class="code"/>
+    <text x="140" y="211" class="codeText">Project URL</text>
+    <rect x="500" y="180" width="360" height="46" class="code"/>
+    <text x="520" y="211" class="codeText">anon public key</text>
+  </g>
+
+  <g transform="translate(80 1360)">
+    <rect width="1040" height="160" rx="0" class="panel"/>
+    <text x="36" y="70" class="gold num">5</text>
+    <text x="120" y="64" class="ink h">このチャットに貼る</text>
+    <text x="120" y="108" class="muted body">URLとanon keyを送ってくれれば、僕が config.js に入れます。</text>
+    <text x="120" y="142" class="danger body">※ secret key は送らないでください。anon public key だけでOKです。</text>
+  </g>
+</svg>

@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>IWARE antique</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <button class="brand-mark" id="homeButton" type="button" aria-label="トップへ戻る">AZ</button>
+      <div class="header-copy">
+        <p class="eyebrow">Private antique desk</p>
+        <h1>IWARE antique</h1>
+      </div>
+    </header>
+
+    <main>
+      <section class="home-screen" id="homeScreen">
+        <button class="home-card" data-screen="upload" type="button">
+          <span class="home-index">1</span>
+          <strong>Upload</strong>
+          <small>写真を入れる</small>
+          <em>Photographer</em>
+        </button>
+        <button class="home-card" data-screen="pricing" type="button">
+          <span class="home-index">2</span>
+          <strong>Pricing</strong>
+          <small>金額を入れる</small>
+          <em id="pricingStatus">Waiting</em>
+        </button>
+        <button class="home-card" data-screen="received" type="button">
+          <span class="home-index">3</span>
+          <strong>Review</strong>
+          <small>価格を見る</small>
+          <em id="receivedStatus">No notice</em>
+        </button>
+      </section>
+
+      <section class="screen-panel" id="uploadScreen" hidden>
+        <div class="screen-head">
+          <button class="back-button" data-screen="home" type="button">戻る</button>
+          <div>
+            <p class="section-kicker">01 Photo Upload</p>
+            <h2>Upload</h2>
+          </div>
+        </div>
+        <label class="upload-box">
+          <span class="upload-title">Select photos</span>
+          <span class="upload-sub">写真をまとめて追加</span>
+          <input id="photoInput" type="file" accept="image/*" capture="environment" multiple />
+        </label>
+        <p class="upload-feedback" id="uploadFeedback" hidden></p>
+        <button class="complete-button" id="uploadCompleteButton" type="button" hidden>完了</button>
+        <section class="thumbnail-strip" id="uploadPreview" aria-live="polite"></section>
+      </section>
+
+      <section class="screen-panel" id="pricingScreen" hidden>
+        <div class="screen-head">
+          <button class="back-button" data-screen="home" type="button">戻る</button>
+          <div>
+            <p class="section-kicker">02 Akira Pricing</p>
+            <h2>Set prices</h2>
+          </div>
+        </div>
+        <button class="send-all-button" id="sendAllButton" type="button">完了</button>
+        <p class="send-feedback" id="sendFeedback" hidden></p>
+        <section class="item-grid" id="pricingGrid" aria-live="polite"></section>
+      </section>
+
+      <section class="screen-panel" id="receivedScreen" hidden>
+        <div class="screen-head">
+          <button class="back-button" data-screen="home" type="button">戻る</button>
+          <div>
+            <p class="section-kicker">03 Price Notice</p>
+            <h2>Review</h2>
+          </div>
+        </div>
+        <section class="notice-bar" id="noticeBar" hidden>
+          <span class="notice-dot"></span>
+          <p>価格指示が届いています。</p>
+        </section>
+        <button class="clear-button" id="clearReceivedButton" type="button">完了</button>
+        <p class="review-feedback" id="reviewFeedback" hidden></p>
+        <section class="item-grid" id="receivedGrid" aria-live="polite"></section>
+      </section>
+
+      <template id="photoTemplate">
+        <article class="item-card">
+          <figure class="photo-frame">
+            <img alt="" />
+          </figure>
+          <div class="item-body">
+            <div class="item-title-row">
+              <h3></h3>
+              <span class="status-badge"></span>
+            </div>
+            <div class="price-row">
+              <label>
+                金額
+                <input class="price-input" type="number" inputmode="numeric" min="0" step="100" placeholder="128000" />
+              </label>
+              <button class="send-price-button" type="button">送る</button>
+            </div>
+            <div class="received-price"></div>
+            <label class="review-check">
+              <input class="review-checkbox" type="checkbox" />
+              <span>完了</span>
+            </label>
+            <div class="stock-row">
+              <time></time>
+              <button class="delete-button" type="button">削除</button>
+            </div>
+          </div>
+        </article>
+      </template>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./config.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
