@@ -107,12 +107,11 @@ photoInput.addEventListener("change", async () => {
 });
 
 uploadCompleteButton.addEventListener("click", () => {
-  if (!confirm("アップロード完了です。トップに戻りますか？")) return;
-
   uploadPreview.innerHTML = "";
   uploadFeedback.hidden = true;
   uploadFeedback.textContent = "";
   uploadCompleteButton.hidden = true;
+  photoInput.value = "";
   setScreen("home");
 });
 
@@ -161,31 +160,25 @@ clearReceivedButton.addEventListener("click", async () => {
     alert("まだチェックしていない写真があります。");
     return;
   }
-  if (!confirm("全部チェックしましたか？")) return;
-
   state.isClearingReview = true;
   clearReceivedButton.disabled = true;
-  state.reviewMessage = "削除中...";
-  renderReceived();
+  const deletedIds = new Set(reviewItems.map((item) => item.id));
+  state.items = state.items.filter((item) => !deletedIds.has(item.id));
+  state.uncheckedReviewIds.clear();
+  state.reviewMessage = "登録済みの写真を削除しました。";
+  saveItems();
+  render();
 
   try {
     await deleteCloudItems(reviewItems);
   } catch (error) {
     console.error(error);
-    state.reviewMessage = "削除に失敗しました。もう一度押してください。";
+    state.reviewMessage = "画面からは消しました。通信が弱い場合は再読み込みして確認してください。";
+    render();
+  } finally {
     state.isClearingReview = false;
     clearReceivedButton.disabled = false;
-    renderReceived();
-    return;
   }
-
-  const deletedIds = new Set(reviewItems.map((item) => item.id));
-  state.items = state.items.filter((item) => !deletedIds.has(item.id));
-  state.uncheckedReviewIds.clear();
-  state.reviewMessage = "登録済みの写真を削除しました。";
-  state.isClearingReview = false;
-  saveItems();
-  render();
 });
 
 function setScreen(screen) {
@@ -538,10 +531,10 @@ function renderItem(item, mode) {
       item.registeredAt = nextRegisteredAt;
       state.uncheckedReviewIds.delete(item.id);
       state.reviewMessage = reviewCheckbox.checked ? `${item.title} を完了しました。` : "";
+      render();
 
       try {
         await persistItem(item, { status: nextStatus, registeredAt: nextRegisteredAt });
-        render();
       } catch (error) {
         console.error(error);
         item.status = previousStatus;
@@ -553,21 +546,20 @@ function renderItem(item, mode) {
   }
 
   deleteButton.addEventListener("click", async () => {
-    if (!confirm(`${item.title} を削除しますか？`)) return;
     deleteButton.disabled = true;
+    const previousItems = [...state.items];
+    state.items = state.items.filter((candidate) => candidate.id !== item.id);
+    saveItems();
+    render();
 
     try {
       await deleteCloudItems([item]);
     } catch (error) {
       console.error(error);
-      deleteButton.disabled = false;
-      alert("削除に失敗しました。もう一度押してください。");
-      return;
+      state.items = previousItems;
+      state.reviewMessage = "削除に失敗しました。もう一度押してください。";
+      render();
     }
-
-    state.items = state.items.filter((candidate) => candidate.id !== item.id);
-    saveItems();
-    render();
   });
 
   return card;
