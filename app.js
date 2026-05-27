@@ -15,6 +15,7 @@ const state = {
   cloudReady: Boolean(supabaseClient),
   isClearingReview: false,
   isUploading: false,
+  activeWrites: 0,
 };
 
 const screens = {
@@ -225,7 +226,7 @@ function normalizeItem(item, index) {
 }
 
 async function loadCloudItems() {
-  if (state.isClearingReview) return;
+  if (isSyncBusy()) return;
 
   const { data, error } = await supabaseClient
     .from("inventory_items")
@@ -234,8 +235,6 @@ async function loadCloudItems() {
 
   if (error) {
     console.error(error);
-    state.cloudReady = false;
-    render();
     return;
   }
 
@@ -244,28 +243,30 @@ async function loadCloudItems() {
 }
 
 async function uploadCloudItem(file, photo, title) {
-  const photoPath = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.jpg`;
-  const resizedBlob = await dataUrlToBlob(photo);
-  const uploadResult = await supabaseClient.storage.from(photoBucket).upload(photoPath, resizedBlob, {
-    contentType: "image/jpeg",
+  return withRemoteWrite(async () => {
+    const photoPath = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.jpg`;
+    const resizedBlob = await dataUrlToBlob(photo);
+    const uploadResult = await supabaseClient.storage.from(photoBucket).upload(photoPath, resizedBlob, {
+      contentType: "image/jpeg",
+    });
+
+    if (uploadResult.error) throw uploadResult.error;
+
+    const { data: publicUrlData } = supabaseClient.storage.from(photoBucket).getPublicUrl(photoPath);
+    const { data, error } = await supabaseClient
+      .from("inventory_items")
+      .insert({
+        title,
+        photo_url: publicUrlData.publicUrl,
+        photo_path: photoPath,
+        status: "waiting",
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return fromCloudItem(data);
   });
-
-  if (uploadResult.error) throw uploadResult.error;
-
-  const { data: publicUrlData } = supabaseClient.storage.from(photoBucket).getPublicUrl(photoPath);
-  const { data, error } = await supabaseClient
-    .from("inventory_items")
-    .insert({
-      title,
-      photo_url: publicUrlData.publicUrl,
-      photo_path: photoPath,
-      status: "waiting",
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-  return fromCloudItem(data);
 }
 
 async function updateCloudItem(item, fields) {
@@ -276,22 +277,37 @@ async function updateCloudItem(item, fields) {
 
 async function deleteCloudItems(items) {
   if (!state.cloudReady || !items.length) return;
-  const photoPaths = items.map((item) => item.photoPath).filter(Boolean);
-  const itemIds = items.map((item) => item.id);
+  return withRemoteWrite(async () => {
+    const photoPaths = items.map((item) => item.photoPath).filter(Boolean);
+    const itemIds = items.map((item) => item.id);
 
-  const { error } = await supabaseClient.from("inventory_items").delete().in("id", itemIds);
-  if (error) throw error;
+    const { error } = await supabaseClient.from("inventory_items").delete().in("id", itemIds);
+    if (error) throw error;
 
-  if (photoPaths.length) {
-    const { error: storageError } = await supabaseClient.storage.from(photoBucket).remove(photoPaths);
-    if (storageError) console.warn(storageError);
-  }
+    if (photoPaths.length) {
+      const { error: storageError } = await supabaseClient.storage.from(photoBucket).remove(photoPaths);
+      if (storageError) console.warn(storageError);
+    }
+  });
 }
 
 async function persistItem(item, fields) {
   Object.assign(item, fields);
   saveItems();
-  await updateCloudItem(item, fields);
+  await withRemoteWrite(() => updateCloudItem(item, fields));
+}
+
+function isSyncBusy() {
+  return state.isUploading || state.isClearingReview || state.activeWrites > 0;
+}
+
+async function withRemoteWrite(action) {
+  state.activeWrites += 1;
+  try {
+    return await action();
+  } finally {
+    state.activeWrites = Math.max(0, state.activeWrites - 1);
+  }
 }
 
 function toCloudFields(fields) {
