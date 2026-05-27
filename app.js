@@ -94,7 +94,13 @@ photoInput.addEventListener("change", async () => {
 });
 
 uploadCompleteButton.addEventListener("click", () => {
-  alert("アップロードしました。戻るでトップへ戻れます。");
+  if (!confirm("アップロード完了です。トップに戻りますか？")) return;
+
+  uploadPreview.innerHTML = "";
+  uploadFeedback.hidden = true;
+  uploadFeedback.textContent = "";
+  uploadCompleteButton.hidden = true;
+  setScreen("home");
 });
 
 sendAllButton.addEventListener("click", async () => {
