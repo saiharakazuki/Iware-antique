@@ -307,8 +307,8 @@ main {
 
 .item-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
 }
 
 .item-grid.compact {
@@ -340,13 +340,13 @@ main {
 
 .photo-frame {
   position: relative;
-  aspect-ratio: 4 / 5;
+  aspect-ratio: 1;
   background: #181818;
 }
 
 .photo-frame::after {
   position: absolute;
-  inset: 9px;
+  inset: 5px;
   border: 1px solid rgba(214, 188, 137, 0.24);
   content: "";
   pointer-events: none;
@@ -361,28 +361,28 @@ main {
 
 .item-body {
   display: grid;
-  gap: 11px;
-  padding: 11px;
+  gap: 7px;
+  padding: 7px;
 }
 
 .item-title-row {
   display: grid;
-  gap: 7px;
+  gap: 5px;
 }
 
 .item-title-row h3 {
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
 }
 
 .status-badge {
   width: fit-content;
-  padding: 3px 7px;
+  padding: 2px 5px;
   color: var(--gold);
   background: rgba(214, 188, 137, 0.08);
   border: 1px solid rgba(214, 188, 137, 0.22);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
 }
 
@@ -394,21 +394,21 @@ main {
 
 .price-row {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .price-row label {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 800;
 }
 
 .price-input {
   width: 100%;
-  min-height: 40px;
-  padding: 9px 10px;
+  min-height: 34px;
+  padding: 7px 6px;
   color: var(--ink);
   background: #0b0b0b;
   border: 1px solid var(--line);
@@ -436,28 +436,28 @@ main {
 
 .review-check {
   display: grid;
-  grid-template-columns: 30px 1fr;
+  grid-template-columns: 22px 1fr;
   align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  padding: 8px 10px;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px;
   color: var(--ink);
   background: rgba(214, 188, 137, 0.06);
   border: 1px solid var(--line-strong);
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 800;
 }
 
 .review-checkbox {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   margin: 0;
   accent-color: var(--gold);
 }
 
 .review-checkbox:checked + span::after {
   color: var(--gold);
-  content: " / checked";
+  content: "";
 }
 
 .send-all-button {
@@ -496,27 +496,26 @@ main {
 
 .received-price {
   color: var(--gold);
-  font-size: 24px;
+  font-size: 17px;
   font-weight: 250;
 }
 
 .stock-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding-top: 10px;
+  display: grid;
+  gap: 6px;
+  padding-top: 7px;
   border-top: 1px solid var(--line);
 }
 
 time {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 700;
 }
 
 .delete-button {
-  min-height: 32px;
+  min-height: 30px;
+  padding: 0 6px;
   color: var(--danger);
   background: transparent;
   border: 1px solid rgba(212, 106, 93, 0.3);
@@ -580,11 +579,12 @@ time {
   }
 
   .item-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
   }
 
   .item-grid.compact {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .thumbnail-strip {
