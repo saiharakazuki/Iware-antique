@@ -23,7 +23,47 @@
     </header>
 
     <main>
-      <section class="home-screen" id="homeScreen">
+      <section class="home-screen" id="topScreen">
+        <section class="progress-panel" aria-label="進捗状況">
+          <div class="progress-head">
+            <p class="section-kicker">Progress</p>
+            <span>確認すると薄くなります</span>
+          </div>
+          <div class="progress-grid">
+            <button class="progress-card" data-screen="pricing" id="progressPricingCard" type="button">
+              <span>金額待ち</span>
+              <strong id="progressPricingCount">0</strong>
+              <small>Akira pricing</small>
+            </button>
+            <button class="progress-card" data-screen="received" id="progressReviewCard" type="button">
+              <span>価格到着</span>
+              <strong id="progressReviewCount">0</strong>
+              <small>Review</small>
+            </button>
+            <button class="progress-card" data-screen="inventory" id="progressStockCard" type="button">
+              <span>在庫写真</span>
+              <strong id="progressStockCount">0</strong>
+              <small>Stock</small>
+            </button>
+          </div>
+        </section>
+        <button class="home-card primary-card" data-screen="inventory" type="button">
+          <span class="home-index">1</span>
+          <span class="card-icon">LIST</span>
+          <strong>在庫管理リスト</strong>
+          <small>倉庫別・カテゴリ別</small>
+          <em id="stockStatus">Stock list</em>
+        </button>
+        <button class="home-card" data-screen="home" type="button">
+          <span class="home-index">2</span>
+          <span class="card-icon">UP</span>
+          <strong>Upload</strong>
+          <small>写真を入れる</small>
+          <em>Photo desk</em>
+        </button>
+      </section>
+
+      <section class="home-screen" id="homeScreen" hidden>
         <button class="home-card" data-screen="upload" type="button">
           <span class="home-index">1</span>
           <strong>Upload</strong>
@@ -46,7 +86,10 @@
 
       <section class="screen-panel" id="uploadScreen" hidden>
         <div class="screen-head">
-          <button class="back-button" data-screen="home" type="button">戻る</button>
+          <div class="screen-actions">
+            <button class="back-button" data-screen="top" type="button">戻る</button>
+            <button class="back-button" data-screen="inventory" type="button">在庫管理リスト</button>
+          </div>
           <div>
             <p class="section-kicker">01 Photo Upload</p>
             <h2>Upload</h2>
@@ -58,8 +101,43 @@
           <input id="photoInput" type="file" accept="image/*" multiple />
         </label>
         <p class="upload-feedback" id="uploadFeedback" hidden></p>
+        <div class="upload-actions upload-route-panel" id="uploadActions" hidden>
+          <label class="select-label">
+            <span>写真の行き先</span>
+            <select class="stock-select" id="uploadRouteSelect">
+              <option value="pricing">アキラ君に金額を付けてもらう</option>
+              <option value="タジミ倉庫">タジミ倉庫</option>
+              <option value="香川1">香川1</option>
+              <option value="香川2">香川2</option>
+              <option value="香川3">香川3</option>
+              <option value="香川4">香川4</option>
+              <option value="香川5">香川5</option>
+              <option value="その他倉庫">その他倉庫</option>
+            </select>
+          </label>
+          <button class="complete-button" id="routeConfirmButton" type="button">進む</button>
+        </div>
+        <section class="destination-panel" id="stockDestinationPanel" hidden>
+          <p class="section-kicker">Stock destination</p>
+          <h3>どこの在庫表に入れますか</h3>
+          <div class="warehouse-grid" id="warehouseGrid"></div>
+          <div class="category-grid" id="categoryGrid" hidden></div>
+        </section>
         <button class="complete-button" id="uploadCompleteButton" type="button" hidden>完了</button>
         <section class="thumbnail-strip" id="uploadPreview" aria-live="polite"></section>
+      </section>
+
+      <section class="screen-panel" id="inventoryScreen" hidden>
+        <div class="screen-head">
+          <button class="back-button" data-screen="top" type="button">戻る</button>
+          <div>
+            <p class="section-kicker">Warehouse stock</p>
+            <h2>在庫管理リスト</h2>
+          </div>
+        </div>
+        <section class="warehouse-grid" id="inventoryWarehouseGrid"></section>
+        <section class="category-grid" id="inventoryCategoryGrid"></section>
+        <section class="item-grid stock-grid" id="inventoryGrid" aria-live="polite"></section>
       </section>
 
       <section class="screen-panel" id="pricingScreen" hidden>

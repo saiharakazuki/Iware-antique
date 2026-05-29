@@ -1,4 +1,15 @@
 const STORAGE_KEY = "iware-antique-flow-v1";
+const PROGRESS_KEY = "iware-antique-progress-v1";
+const WAREHOUSES = [
+  { name: "タジミ倉庫", image: "warehouse-photo-tajimi" },
+  { name: "香川1", image: "warehouse-photo-kagawa-1" },
+  { name: "香川2", image: "warehouse-photo-kagawa-2" },
+  { name: "香川3", image: "warehouse-photo-kagawa-3" },
+  { name: "香川4", image: "warehouse-photo-kagawa-4" },
+  { name: "香川5", image: "warehouse-photo-kagawa-5" },
+  { name: "その他倉庫", image: "warehouse-photo-other" },
+];
+const CATEGORIES = ["チェア", "ソファー", "チェスターソファー", "テーブル", "キャビネット", "チェスト", "シャンデリア", "小物", "その他"];
 const config = window.IWARE_CONFIG || {};
 const photoBucket = config.photoBucket || "iware-photos";
 const supabaseClient =
@@ -7,8 +18,14 @@ const supabaseClient =
   window.supabase?.createClient(config.supabaseUrl, config.supabaseAnonKey);
 
 const state = {
-  screen: "home",
+  screen: "top",
   items: loadLocalItems(),
+  seenProgress: loadSeenProgress(),
+  recentUploadIds: [],
+  selectedStockWarehouse: "",
+  selectedStockCategory: CATEGORIES[0],
+  inventoryWarehouse: "",
+  inventoryCategory: CATEGORIES[0],
   missingPriceIds: new Set(),
   uncheckedReviewIds: new Set(),
   reviewMessage: "",
@@ -19,8 +36,10 @@ const state = {
 };
 
 const screens = {
+  top: document.querySelector("#topScreen"),
   home: document.querySelector("#homeScreen"),
   upload: document.querySelector("#uploadScreen"),
+  inventory: document.querySelector("#inventoryScreen"),
   pricing: document.querySelector("#pricingScreen"),
   received: document.querySelector("#receivedScreen"),
 };
@@ -30,19 +49,35 @@ const photoInput = document.querySelector("#photoInput");
 const uploadFeedback = document.querySelector("#uploadFeedback");
 const uploadPreview = document.querySelector("#uploadPreview");
 const uploadCompleteButton = document.querySelector("#uploadCompleteButton");
+const uploadActions = document.querySelector("#uploadActions");
+const uploadRouteSelect = document.querySelector("#uploadRouteSelect");
+const routeConfirmButton = document.querySelector("#routeConfirmButton");
+const stockDestinationPanel = document.querySelector("#stockDestinationPanel");
+const warehouseGrid = document.querySelector("#warehouseGrid");
+const categoryGrid = document.querySelector("#categoryGrid");
+const inventoryWarehouseGrid = document.querySelector("#inventoryWarehouseGrid");
+const inventoryCategoryGrid = document.querySelector("#inventoryCategoryGrid");
+const inventoryGrid = document.querySelector("#inventoryGrid");
 const pricingGrid = document.querySelector("#pricingGrid");
 const receivedGrid = document.querySelector("#receivedGrid");
 const noticeBar = document.querySelector("#noticeBar");
 const photoTemplate = document.querySelector("#photoTemplate");
 const pricingStatus = document.querySelector("#pricingStatus");
 const receivedStatus = document.querySelector("#receivedStatus");
+const stockStatus = document.querySelector("#stockStatus");
+const progressPricingCard = document.querySelector("#progressPricingCard");
+const progressReviewCard = document.querySelector("#progressReviewCard");
+const progressStockCard = document.querySelector("#progressStockCard");
+const progressPricingCount = document.querySelector("#progressPricingCount");
+const progressReviewCount = document.querySelector("#progressReviewCount");
+const progressStockCount = document.querySelector("#progressStockCount");
 const clearReceivedButton = document.querySelector("#clearReceivedButton");
 const sendAllButton = document.querySelector("#sendAllButton");
 const sendFeedback = document.querySelector("#sendFeedback");
 const reviewFeedback = document.querySelector("#reviewFeedback");
 
 homeButton.addEventListener("click", () => {
-  setScreen("home");
+  setScreen("top");
 });
 
 document.querySelectorAll("[data-screen]").forEach((button) => {
@@ -57,9 +92,12 @@ photoInput.addEventListener("change", async () => {
 
   const nextNumber = state.items.length + 1;
   const newItems = [];
+  state.recentUploadIds = [];
   state.isUploading = true;
   photoInput.disabled = true;
   uploadCompleteButton.hidden = true;
+  uploadActions.hidden = true;
+  stockDestinationPanel.hidden = true;
   uploadFeedback.textContent = "アップロードを開始します...";
   uploadFeedback.hidden = false;
 
@@ -81,6 +119,7 @@ photoInput.addEventListener("change", async () => {
           };
 
       newItems.unshift(item);
+      state.recentUploadIds.unshift(item.id);
       state.items = [item, ...state.items];
       renderUploadPreview(newItems);
       renderHomeStatus();
@@ -90,7 +129,7 @@ photoInput.addEventListener("change", async () => {
     photoInput.value = "";
     uploadFeedback.textContent = `${newItems.length}枚アップロードしました。`;
     uploadFeedback.hidden = false;
-    uploadCompleteButton.hidden = false;
+    uploadActions.hidden = false;
     renderUploadPreview(newItems);
     saveItems();
     render();
@@ -107,13 +146,35 @@ photoInput.addEventListener("change", async () => {
 });
 
 uploadCompleteButton.addEventListener("click", () => {
+  resetUploadDesk();
+  setScreen("top");
+});
+
+routeConfirmButton.addEventListener("click", () => {
+  if (uploadRouteSelect.value === "pricing") {
+    uploadFeedback.textContent = "アキラ君へ送りました。";
+    uploadFeedback.hidden = false;
+    uploadActions.hidden = true;
+    uploadCompleteButton.hidden = false;
+    renderHomeStatus();
+    return;
+  }
+
+  state.selectedStockWarehouse = uploadRouteSelect.value;
+  stockDestinationPanel.hidden = false;
+  renderDestinationPickers();
+});
+
+function resetUploadDesk() {
   uploadPreview.innerHTML = "";
   uploadFeedback.hidden = true;
   uploadFeedback.textContent = "";
   uploadCompleteButton.hidden = true;
+  uploadActions.hidden = true;
+  stockDestinationPanel.hidden = true;
   photoInput.value = "";
-  setScreen("home");
-});
+  state.recentUploadIds = [];
+}
 
 sendAllButton.addEventListener("click", async () => {
   const waitingItems = state.items.filter((item) => item.status === "waiting");
@@ -182,12 +243,36 @@ clearReceivedButton.addEventListener("click", async () => {
 });
 
 function setScreen(screen) {
+  markProgressSeen(screen);
   state.screen = screen;
   if (screen !== "received") {
     state.reviewMessage = "";
     state.uncheckedReviewIds.clear();
   }
   render();
+}
+
+function loadSeenProgress() {
+  try {
+    return { waiting: 0, review: 0, stock: 0, ...JSON.parse(localStorage.getItem(PROGRESS_KEY) || "{}") };
+  } catch {
+    return { waiting: 0, review: 0, stock: 0 };
+  }
+}
+
+function saveSeenProgress() {
+  localStorage.setItem(PROGRESS_KEY, JSON.stringify(state.seenProgress));
+}
+
+function markProgressSeen(screen) {
+  const waitingCount = state.items.filter((item) => item.status === "waiting").length;
+  const reviewCount = state.items.filter((item) => item.status === "sent" || item.status === "registered").length;
+  const stockCount = state.items.filter((item) => item.status === "stock").length;
+
+  if (screen === "pricing") state.seenProgress.waiting = waitingCount;
+  if (screen === "received") state.seenProgress.review = reviewCount;
+  if (screen === "inventory") state.seenProgress.stock = stockCount;
+  saveSeenProgress();
 }
 
 function loadLocalItems() {
@@ -218,6 +303,24 @@ function normalizeItem(item, index) {
   };
 }
 
+function makeStockTitle(warehouse, category, title) {
+  return `STOCK｜${warehouse}｜${category}｜${title}`;
+}
+
+function normalizeWarehouseName(warehouse) {
+  return warehouse === "田島倉庫" || warehouse === "田島の倉庫" ? "タジミ倉庫" : warehouse;
+}
+
+function parseStockTitle(title) {
+  const parts = String(title || "").split("｜");
+  if (parts[0] !== "STOCK") return null;
+  return {
+    warehouse: normalizeWarehouseName(parts[1] || WAREHOUSES[0].name),
+    category: parts[2] || CATEGORIES[0],
+    label: parts.slice(3).join("｜") || "PHOTO",
+  };
+}
+
 async function loadCloudItems() {
   if (isSyncBusy()) return;
 
@@ -235,7 +338,7 @@ async function loadCloudItems() {
   render();
 }
 
-async function uploadCloudItem(file, photo, title) {
+async function uploadCloudItem(file, photo, title, status = "waiting") {
   return withRemoteWrite(async () => {
     const photoPath = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.jpg`;
     const resizedBlob = await dataUrlToBlob(photo);
@@ -252,7 +355,7 @@ async function uploadCloudItem(file, photo, title) {
         title,
         photo_url: publicUrlData.publicUrl,
         photo_path: photoPath,
-        status: "waiting",
+        status,
       })
       .select()
       .single();
@@ -305,6 +408,7 @@ async function withRemoteWrite(action) {
 
 function toCloudFields(fields) {
   const mapped = {};
+  if ("title" in fields) mapped.title = fields.title;
   if ("price" in fields) mapped.price = fields.price;
   if ("status" in fields) mapped.status = fields.status;
   if ("sentAt" in fields) mapped.sent_at = fields.sentAt || null;
@@ -364,6 +468,81 @@ function render() {
 
   renderPricing();
   renderReceived();
+  renderInventory();
+}
+
+function renderDestinationPickers() {
+  warehouseGrid.innerHTML = "";
+  categoryGrid.innerHTML = "";
+  categoryGrid.hidden = false;
+  state.selectedStockWarehouse ||= WAREHOUSES[0].name;
+  state.selectedStockCategory ||= CATEGORIES[0];
+
+  const warehouseLabel = document.createElement("label");
+  warehouseLabel.className = "select-label";
+  warehouseLabel.innerHTML = `
+    <span>どこの在庫表に入れますか</span>
+    <select class="stock-select" id="stockWarehouseSelect">
+      ${WAREHOUSES.map(
+        (warehouse) => `<option value="${warehouse.name}" ${warehouse.name === state.selectedStockWarehouse ? "selected" : ""}>${warehouse.name}</option>`,
+      ).join("")}
+    </select>
+  `;
+
+  const categoryLabel = document.createElement("label");
+  categoryLabel.className = "select-label";
+  categoryLabel.innerHTML = `
+    <span>カテゴリ</span>
+    <select class="stock-select" id="stockCategorySelect">
+      ${CATEGORIES.map(
+        (category) => `<option value="${category}" ${category === state.selectedStockCategory ? "selected" : ""}>${category}</option>`,
+      ).join("")}
+    </select>
+  `;
+
+  const saveButton = document.createElement("button");
+  saveButton.className = "complete-button stock-save-button";
+  saveButton.type = "button";
+  saveButton.textContent = "この在庫表に入れる";
+
+  warehouseGrid.append(warehouseLabel);
+  categoryGrid.append(categoryLabel, saveButton);
+
+  warehouseLabel.querySelector("select").addEventListener("change", (event) => {
+    state.selectedStockWarehouse = event.target.value;
+  });
+  categoryLabel.querySelector("select").addEventListener("change", (event) => {
+    state.selectedStockCategory = event.target.value;
+  });
+  saveButton.addEventListener("click", () => sendRecentUploadsToStock(state.selectedStockWarehouse, state.selectedStockCategory));
+}
+
+async function sendRecentUploadsToStock(warehouse, category) {
+  const recentItems = state.items.filter((item) => state.recentUploadIds.includes(item.id));
+  if (!recentItems.length) return;
+
+  uploadActions.hidden = true;
+  stockDestinationPanel.hidden = true;
+  uploadFeedback.textContent = `${warehouse} / ${category} に入れています...`;
+  uploadFeedback.hidden = false;
+
+  try {
+    await Promise.all(
+      recentItems.map((item) =>
+        persistItem(item, {
+          title: makeStockTitle(warehouse, category, item.title),
+          status: "stock",
+          price: "",
+        }),
+      ),
+    );
+    uploadFeedback.textContent = `${warehouse} / ${category} に保存しました。`;
+    uploadCompleteButton.hidden = false;
+    renderHomeStatus();
+  } catch (error) {
+    console.error(error);
+    uploadFeedback.textContent = "在庫表への保存に失敗しました。もう一度試してください。";
+  }
 }
 
 function renderUploadPreview(items) {
@@ -401,11 +580,106 @@ function renderHomeStatus() {
   const waitingCount = state.items.filter((item) => item.status === "waiting").length;
   const sentCount = state.items.filter((item) => item.status === "sent").length;
   const registeredCount = state.items.filter((item) => item.status === "registered").length;
+  const reviewCount = sentCount + registeredCount;
+  const stockCount = state.items.filter((item) => item.status === "stock").length;
 
   pricingStatus.textContent = waitingCount ? `${waitingCount}件あり` : "待機中";
-  receivedStatus.textContent = sentCount + registeredCount ? `${sentCount + registeredCount}件届いています` : "通知なし";
+  receivedStatus.textContent = reviewCount ? `${reviewCount}件届いています` : "通知なし";
+  stockStatus.textContent = stockCount ? `${stockCount}件` : "Stock list";
   pricingStatus.closest(".home-card").classList.toggle("has-motion", waitingCount > 0);
-  receivedStatus.closest(".home-card").classList.toggle("has-motion", sentCount + registeredCount > 0);
+  receivedStatus.closest(".home-card").classList.toggle("has-motion", reviewCount > 0);
+
+  progressPricingCount.textContent = waitingCount;
+  progressReviewCount.textContent = reviewCount;
+  progressStockCount.textContent = stockCount;
+  updateProgressCard(progressPricingCard, waitingCount, state.seenProgress.waiting);
+  updateProgressCard(progressReviewCard, reviewCount, state.seenProgress.review);
+  updateProgressCard(progressStockCard, stockCount, state.seenProgress.stock);
+}
+
+function updateProgressCard(card, count, seenCount) {
+  const hasNew = count > seenCount;
+  card.classList.toggle("has-new", hasNew);
+  card.classList.toggle("is-muted", !hasNew);
+}
+
+function renderInventory() {
+  if (!inventoryWarehouseGrid || !inventoryCategoryGrid || !inventoryGrid) return;
+
+  inventoryWarehouseGrid.innerHTML = "";
+  inventoryCategoryGrid.innerHTML = "";
+
+  if (state.inventoryWarehouse) {
+    const backButton = document.createElement("button");
+    backButton.className = "pill-button warehouse-list-back";
+    backButton.type = "button";
+    backButton.textContent = "倉庫一覧へ戻る";
+    backButton.addEventListener("click", () => {
+      state.inventoryWarehouse = "";
+      renderInventory();
+    });
+
+    const title = document.createElement("div");
+    title.className = "warehouse-detail-title";
+    title.innerHTML = `<span>Selected warehouse</span><strong>${state.inventoryWarehouse}</strong>`;
+    inventoryWarehouseGrid.append(backButton, title);
+    inventoryWarehouseGrid.classList.add("is-detail");
+  } else {
+    inventoryWarehouseGrid.classList.remove("is-detail");
+  }
+
+  if (state.inventoryWarehouse) {
+    inventoryCategoryGrid.hidden = false;
+    CATEGORIES.forEach((category, index) => {
+      const count = state.items.filter((item) => {
+        const stock = parseStockTitle(item.title);
+        return item.status === "stock" && stock?.warehouse === state.inventoryWarehouse && stock?.category === category;
+      }).length;
+      const button = document.createElement("button");
+      button.className = "pill-button category-button";
+      button.type = "button";
+      button.innerHTML = `
+        <span class="category-number">${String(index + 1).padStart(2, "0")}</span>
+        <span class="category-copy"><strong>${category}</strong><small>${count} items</small></span>
+        <em>見る</em>
+      `;
+      button.classList.toggle("is-active", state.inventoryCategory === category);
+      button.addEventListener("click", () => {
+        state.inventoryCategory = category;
+        renderInventory();
+      });
+      inventoryCategoryGrid.append(button);
+    });
+
+    const stockItems = state.items.filter((item) => {
+      const stock = parseStockTitle(item.title);
+      return item.status === "stock" && stock?.warehouse === state.inventoryWarehouse && stock?.category === state.inventoryCategory;
+    });
+    renderGrid(inventoryGrid, stockItems, "stock", "このカテゴリの在庫写真はありません。");
+    return;
+  }
+
+  WAREHOUSES.forEach((warehouse) => {
+    const count = state.items.filter((item) => item.status === "stock" && parseStockTitle(item.title)?.warehouse === warehouse.name).length;
+    const button = document.createElement("button");
+    button.className = "pill-button warehouse-button";
+    button.type = "button";
+    button.innerHTML = `
+      <span class="warehouse-photo ${warehouse.image}" aria-hidden="true"></span>
+      <span class="warehouse-name">${warehouse.name}</span>
+      <em>${count}件</em>
+    `;
+    button.classList.toggle("is-active", state.inventoryWarehouse === warehouse.name);
+    button.addEventListener("click", () => {
+      state.inventoryWarehouse = warehouse.name;
+      state.inventoryCategory = CATEGORIES[0];
+      renderInventory();
+    });
+    inventoryWarehouseGrid.append(button);
+  });
+
+  inventoryCategoryGrid.hidden = true;
+  renderGrid(inventoryGrid, [], "stock", "倉庫を選んでください。");
 }
 
 function renderPricing() {
@@ -456,7 +730,8 @@ function renderItem(item, mode) {
 
   image.src = item.photo;
   image.alt = `${item.title} の写真`;
-  title.textContent = item.title;
+  const stockInfo = parseStockTitle(item.title);
+  title.textContent = stockInfo?.label || item.title;
   priceInput.value = item.price || "";
   time.dateTime = item.createdAt;
   time.textContent = formatDate(item.status === "sent" ? item.sentAt : item.createdAt);
@@ -543,6 +818,17 @@ function renderItem(item, mode) {
         render();
       }
     });
+  }
+
+  if (mode === "stock") {
+    badge.textContent = stockInfo?.category || "在庫";
+    badge.classList.add("is-priced");
+    priceRow.hidden = true;
+    receivedPrice.hidden = false;
+    receivedPrice.textContent = stockInfo?.warehouse || "在庫";
+    reviewCheck.hidden = true;
+    deleteButton.hidden = false;
+    deleteButton.disabled = false;
   }
 
   deleteButton.addEventListener("click", async () => {

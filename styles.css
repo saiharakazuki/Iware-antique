@@ -119,6 +119,76 @@ main {
   gap: 10px;
 }
 
+.progress-panel {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  background:
+    linear-gradient(135deg, rgba(214, 188, 137, 0.08), transparent 58%),
+    rgba(17, 17, 17, 0.72);
+  border: 1px solid var(--line);
+}
+
+.progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.progress-head span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.progress-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.progress-card {
+  display: grid;
+  min-height: 86px;
+  align-content: space-between;
+  gap: 6px;
+  padding: 10px;
+  color: var(--ink);
+  text-align: left;
+  background: #0d0d0d;
+  border: 1px solid var(--line);
+  transition:
+    opacity 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease;
+}
+
+.progress-card span,
+.progress-card small {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.progress-card strong {
+  color: var(--gold);
+  font-size: 30px;
+  font-weight: 250;
+  line-height: 1;
+}
+
+.progress-card.has-new {
+  background: rgba(214, 188, 137, 0.08);
+  border-color: var(--line-strong);
+  box-shadow: inset 0 0 0 1px rgba(214, 188, 137, 0.08);
+}
+
+.progress-card.is-muted {
+  opacity: 0.46;
+}
+
 .home-card {
   display: grid;
   grid-template-columns: 48px 1fr auto;
@@ -142,6 +212,28 @@ main {
 
 .home-card.has-motion {
   border-color: var(--line-strong);
+}
+
+.primary-card {
+  min-height: 132px;
+  border-color: var(--line-strong);
+}
+
+.card-icon {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+  display: grid;
+  min-width: 42px;
+  min-height: 34px;
+  place-items: center;
+  padding: 0 8px;
+  color: var(--gold);
+  background: rgba(214, 188, 137, 0.07);
+  border: 1px solid rgba(214, 188, 137, 0.26);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
 }
 
 .home-card.has-motion::after {
@@ -204,6 +296,11 @@ main {
   gap: 14px;
   padding-bottom: 18px;
   border-bottom: 1px solid var(--line);
+}
+
+.screen-actions {
+  display: grid;
+  gap: 7px;
 }
 
 .screen-head h2 {
@@ -271,6 +368,225 @@ main {
   border: 1px solid var(--line-strong);
 }
 
+.upload-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.upload-route-panel {
+  grid-template-columns: 1fr auto;
+  align-items: end;
+}
+
+.ghost-button {
+  color: var(--gold);
+  background: rgba(214, 188, 137, 0.06);
+  border: 1px solid var(--line-strong);
+}
+
+.destination-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  background: rgba(17, 17, 17, 0.82);
+  border: 1px solid var(--line);
+}
+
+.destination-panel h3 {
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.select-label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.stock-select {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 12px;
+  color: var(--ink);
+  background: #0b0b0b;
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+}
+
+.stock-save-button {
+  width: 100%;
+  justify-self: stretch;
+}
+
+.warehouse-grid,
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.inventory-screen .warehouse-grid,
+#inventoryWarehouseGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pill-button {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 10px;
+  color: var(--ink);
+  text-align: left;
+  background: #111;
+  border: 1px solid var(--line);
+}
+
+.pill-button.is-active {
+  color: #090909;
+  background: var(--gold);
+  border-color: var(--gold);
+}
+
+.pill-button em {
+  color: inherit;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  opacity: 0.72;
+}
+
+.warehouse-button {
+  display: grid;
+  grid-template-columns: 72px 1fr auto;
+  min-height: 86px;
+  align-items: center;
+  padding: 8px;
+}
+
+.warehouse-photo {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1.22;
+  background:
+    linear-gradient(145deg, rgba(243, 239, 231, 0.12), transparent 52%),
+    linear-gradient(180deg, #24211c, #0d0d0c);
+  border: 1px solid rgba(214, 188, 137, 0.22);
+}
+
+.warehouse-photo-tajimi {
+  background:
+    linear-gradient(180deg, rgba(243, 239, 231, 0.2) 0 28%, transparent 28%),
+    linear-gradient(135deg, transparent 0 38%, rgba(214, 188, 137, 0.28) 38% 43%, transparent 43%),
+    linear-gradient(180deg, #34302a, #111);
+}
+
+.warehouse-photo-kagawa-1,
+.warehouse-photo-kagawa-4 {
+  background:
+    linear-gradient(90deg, rgba(214, 188, 137, 0.22) 0 18%, transparent 18% 82%, rgba(214, 188, 137, 0.18) 82%),
+    linear-gradient(180deg, #2d2b27, #0f0f0e);
+}
+
+.warehouse-photo-kagawa-2,
+.warehouse-photo-kagawa-5 {
+  background:
+    linear-gradient(145deg, rgba(214, 188, 137, 0.28) 0 26%, transparent 26%),
+    linear-gradient(90deg, #181818 0 28%, #312d26 28% 72%, #111 72%);
+}
+
+.warehouse-photo-kagawa-3,
+.warehouse-photo-other {
+  background:
+    linear-gradient(180deg, rgba(243, 239, 231, 0.16) 0 24%, transparent 24%),
+    radial-gradient(circle at 74% 38%, rgba(214, 188, 137, 0.26), transparent 28%),
+    linear-gradient(180deg, #28241f, #0d0d0c);
+}
+
+.warehouse-name {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+#inventoryWarehouseGrid.is-detail {
+  grid-template-columns: 1fr;
+}
+
+.warehouse-list-back {
+  justify-content: center;
+  min-height: 42px;
+}
+
+.warehouse-detail-title {
+  display: grid;
+  gap: 5px;
+  padding: 15px;
+  background: rgba(214, 188, 137, 0.07);
+  border: 1px solid var(--line-strong);
+}
+
+.warehouse-detail-title span {
+  color: var(--gold);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.warehouse-detail-title strong {
+  font-size: 28px;
+  font-weight: 300;
+}
+
+.category-button {
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  min-height: 72px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.04), transparent),
+    #101010;
+}
+
+.category-number {
+  display: grid;
+  width: 34px;
+  aspect-ratio: 1;
+  place-items: center;
+  color: var(--gold);
+  border: 1px solid rgba(214, 188, 137, 0.26);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.category-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.category-copy strong {
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.category-copy small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.category-button.is-active .category-number,
+.category-button.is-active .category-copy small {
+  color: #090909;
+  border-color: rgba(9, 9, 9, 0.22);
+}
+
 .thumbnail-strip {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -313,6 +629,10 @@ main {
 
 .item-grid.compact {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.stock-grid {
+  margin-top: 6px;
 }
 
 .item-card {
@@ -572,10 +892,30 @@ time {
     grid-template-columns: 42px 1fr;
   }
 
+  .progress-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .progress-card {
+    min-height: 78px;
+    padding: 8px;
+  }
+
+  .progress-card strong {
+    font-size: 25px;
+  }
+
   .home-card em {
     grid-column: 2;
     grid-row: 3;
     margin-top: 4px;
+  }
+
+  .card-icon {
+    grid-column: 2;
+    grid-row: 3;
+    justify-self: end;
+    margin-top: 2px;
   }
 
   .item-grid {
@@ -589,5 +929,18 @@ time {
 
   .thumbnail-strip {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .upload-actions,
+  .category-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .upload-route-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .warehouse-grid {
+    grid-template-columns: 1fr;
   }
 }
