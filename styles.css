@@ -289,6 +289,12 @@ main {
   gap: 16px;
 }
 
+.menu-toolbar {
+  display: flex;
+  justify-content: flex-start;
+  padding-bottom: 6px;
+}
+
 .screen-head {
   display: flex;
   align-items: end;
@@ -311,6 +317,7 @@ main {
 }
 
 .back-button,
+.sub-nav-button,
 .send-price-button,
 .delete-button,
 .clear-button,
@@ -326,6 +333,23 @@ main {
 .back-button {
   color: var(--muted);
   background: transparent;
+  border: 1px solid var(--line);
+}
+
+.icon-back {
+  display: grid;
+  width: 44px;
+  min-width: 44px;
+  padding: 0;
+  place-items: center;
+  color: var(--gold);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.sub-nav-button {
+  color: var(--muted);
+  background: rgba(243, 239, 231, 0.03);
   border: 1px solid var(--line);
 }
 
@@ -725,7 +749,9 @@ main {
   font-weight: 800;
 }
 
-.price-input {
+.price-input,
+.destination-select,
+.stock-category-select {
   width: 100%;
   min-height: 34px;
   padding: 7px 6px;
@@ -735,7 +761,9 @@ main {
   border-radius: 0;
 }
 
-.price-input:focus {
+.price-input:focus,
+.destination-select:focus,
+.stock-category-select:focus {
   border-color: var(--line-strong);
   outline: none;
 }

@@ -1,13 +1,7 @@
 const STORAGE_KEY = "iware-antique-flow-v1";
 const PROGRESS_KEY = "iware-antique-progress-v1";
 const WAREHOUSES = [
-  { name: "タジミ倉庫", image: "warehouse-photo-tajimi" },
-  { name: "香川1", image: "warehouse-photo-kagawa-1" },
-  { name: "香川2", image: "warehouse-photo-kagawa-2" },
-  { name: "香川3", image: "warehouse-photo-kagawa-3" },
-  { name: "香川4", image: "warehouse-photo-kagawa-4" },
-  { name: "香川5", image: "warehouse-photo-kagawa-5" },
-  { name: "その他倉庫", image: "warehouse-photo-other" },
+  { name: "多治見の倉庫", image: "warehouse-photo-tajimi" },
 ];
 const CATEGORIES = ["チェア", "ソファー", "チェスターソファー", "テーブル", "キャビネット", "チェスト", "シャンデリア", "小物", "その他"];
 const config = window.IWARE_CONFIG || {};
@@ -27,6 +21,7 @@ const state = {
   inventoryWarehouse: "",
   inventoryCategory: CATEGORIES[0],
   missingPriceIds: new Set(),
+  pricingDrafts: new Map(),
   uncheckedReviewIds: new Set(),
   reviewMessage: "",
   cloudReady: Boolean(supabaseClient),
@@ -50,8 +45,6 @@ const uploadFeedback = document.querySelector("#uploadFeedback");
 const uploadPreview = document.querySelector("#uploadPreview");
 const uploadCompleteButton = document.querySelector("#uploadCompleteButton");
 const uploadActions = document.querySelector("#uploadActions");
-const uploadRouteSelect = document.querySelector("#uploadRouteSelect");
-const routeConfirmButton = document.querySelector("#routeConfirmButton");
 const stockDestinationPanel = document.querySelector("#stockDestinationPanel");
 const warehouseGrid = document.querySelector("#warehouseGrid");
 const categoryGrid = document.querySelector("#categoryGrid");
@@ -81,9 +74,18 @@ homeButton.addEventListener("click", () => {
 });
 
 document.querySelectorAll("[data-screen]").forEach((button) => {
+  button.dataset.boundClick = "true";
   button.addEventListener("click", () => {
+    if (!button.dataset.screen) return;
     setScreen(button.dataset.screen);
   });
+});
+
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-screen]");
+  if (!button || button.disabled) return;
+  if (button.dataset.boundClick === "true") return;
+  setScreen(button.dataset.screen);
 });
 
 photoInput.addEventListener("change", async () => {
@@ -127,9 +129,9 @@ photoInput.addEventListener("change", async () => {
     }
 
     photoInput.value = "";
-    uploadFeedback.textContent = `${newItems.length}枚アップロードしました。`;
+    uploadFeedback.textContent = `${newItems.length}枚アップロードしました。Pricingで金額を入れてください。`;
     uploadFeedback.hidden = false;
-    uploadActions.hidden = false;
+    uploadCompleteButton.hidden = false;
     renderUploadPreview(newItems);
     saveItems();
     render();
@@ -147,22 +149,7 @@ photoInput.addEventListener("change", async () => {
 
 uploadCompleteButton.addEventListener("click", () => {
   resetUploadDesk();
-  setScreen("top");
-});
-
-routeConfirmButton.addEventListener("click", () => {
-  if (uploadRouteSelect.value === "pricing") {
-    uploadFeedback.textContent = "アキラ君へ送りました。";
-    uploadFeedback.hidden = false;
-    uploadActions.hidden = true;
-    uploadCompleteButton.hidden = false;
-    renderHomeStatus();
-    return;
-  }
-
-  state.selectedStockWarehouse = uploadRouteSelect.value;
-  stockDestinationPanel.hidden = false;
-  renderDestinationPickers();
+  setScreen("home");
 });
 
 function resetUploadDesk() {
@@ -177,40 +164,50 @@ function resetUploadDesk() {
 }
 
 sendAllButton.addEventListener("click", async () => {
-  const waitingItems = state.items.filter((item) => item.status === "waiting");
-  const missingItems = waitingItems.filter((item) => !item.price);
-  if (missingItems.length) {
-    state.missingPriceIds = new Set(missingItems.map((item) => item.id));
-    sendFeedback.textContent = `${missingItems.length}件の金額が未入力です。`;
+  const entries = Array.from(pricingGrid.querySelectorAll(".item-card"))
+    .map(readPricingCard)
+    .filter(Boolean);
+  if (!entries.length) return;
+
+  const missingEntries = entries.filter((entry) => !entry.price);
+  if (missingEntries.length) {
+    state.missingPriceIds = new Set(missingEntries.map((entry) => entry.item.id));
+    sendFeedback.textContent = `${missingEntries.length}件の金額が未入力です。`;
     sendFeedback.hidden = false;
     renderPricing();
     return;
   }
 
-  const sentAt = new Date().toISOString();
   sendAllButton.disabled = true;
-  sendFeedback.textContent = "送信中...";
+  sendAllButton.textContent = "送信中...";
+  sendFeedback.textContent = "まとめて送信しています...";
   sendFeedback.hidden = false;
 
   try {
-    await Promise.all(waitingItems.map((item) => persistItem(item, { status: "sent", sentAt })));
+    await Promise.all(
+      entries.map((entry) => {
+        const fields = makePricingFields(entry.item, entry.price, entry.destination, entry.category);
+        return persistItem(entry.item, fields);
+      }),
+    );
   } catch (error) {
     console.error(error);
-    sendFeedback.textContent = "送信に失敗しました。もう一度押してください。";
+    sendFeedback.textContent = "一括送信に失敗しました。もう一度押してください。";
     sendAllButton.disabled = false;
+    sendAllButton.textContent = "一括で完了";
     return;
   }
 
   state.missingPriceIds.clear();
-  sendFeedback.textContent = `${waitingItems.length}件の金額を送信しました。戻るでトップへ戻れます。`;
+  entries.forEach((entry) => state.pricingDrafts.delete(entry.item.id));
+  sendFeedback.textContent = `${entries.length}件を送信しました。`;
   sendFeedback.hidden = false;
-  saveItems();
   renderHomeStatus();
-  markPricingAsSent();
+  render();
 });
 
 clearReceivedButton.addEventListener("click", async () => {
-  const reviewItems = state.items.filter((item) => item.status === "sent" || item.status === "registered");
+  const reviewItems = state.items.filter((item) => isReviewItem(item));
   if (!reviewItems.length) return;
 
   const uncheckedItems = reviewItems.filter((item) => item.status !== "registered");
@@ -223,18 +220,43 @@ clearReceivedButton.addEventListener("click", async () => {
   }
   state.isClearingReview = true;
   clearReceivedButton.disabled = true;
-  const deletedIds = new Set(reviewItems.map((item) => item.id));
+  const legacyReviewItems = [];
+  const stockReviewItems = [];
+  reviewItems.forEach((item) => {
+    const stockInfo = parseStockTitle(item.title);
+    if (stockInfo) {
+      stockReviewItems.push({ item, stockInfo });
+    } else {
+      legacyReviewItems.push(item);
+    }
+  });
+
+  const deletedIds = new Set(legacyReviewItems.map((item) => item.id));
+  stockReviewItems.forEach(({ item, stockInfo }) => {
+    item.title = makeStockTitle(stockInfo.warehouse, stockInfo.category, "stock", stockInfo.label);
+    item.status = "sent";
+    item.registeredAt = "";
+  });
   state.items = state.items.filter((item) => !deletedIds.has(item.id));
   state.uncheckedReviewIds.clear();
-  state.reviewMessage = "登録済みの写真を削除しました。";
+  state.reviewMessage = "Reviewを完了しました。在庫リストには残っています。";
   saveItems();
   render();
 
   try {
-    await deleteCloudItems(reviewItems);
+    await Promise.all(
+      stockReviewItems.map(({ item }) =>
+        persistItem(item, {
+          title: item.title,
+          status: item.status,
+          registeredAt: item.registeredAt,
+        }),
+      ),
+    );
+    await deleteCloudItems(legacyReviewItems);
   } catch (error) {
     console.error(error);
-    state.reviewMessage = "画面からは消しました。通信が弱い場合は再読み込みして確認してください。";
+    state.reviewMessage = "画面は更新しました。通信が弱い場合は再読み込みして確認してください。";
     render();
   } finally {
     state.isClearingReview = false;
@@ -266,8 +288,8 @@ function saveSeenProgress() {
 
 function markProgressSeen(screen) {
   const waitingCount = state.items.filter((item) => item.status === "waiting").length;
-  const reviewCount = state.items.filter((item) => item.status === "sent" || item.status === "registered").length;
-  const stockCount = state.items.filter((item) => item.status === "stock").length;
+  const reviewCount = state.items.filter((item) => isReviewItem(item)).length;
+  const stockCount = state.items.filter((item) => isStockItem(item)).length;
 
   if (screen === "pricing") state.seenProgress.waiting = waitingCount;
   if (screen === "received") state.seenProgress.review = reviewCount;
@@ -303,26 +325,43 @@ function normalizeItem(item, index) {
   };
 }
 
-function makeStockTitle(warehouse, category, title) {
-  return `STOCK｜${warehouse}｜${category}｜${title}`;
+function makeStockTitle(warehouse, category, routeOrTitle, maybeTitle) {
+  const route = maybeTitle ? routeOrTitle : "stock";
+  const title = maybeTitle || routeOrTitle;
+  return `STOCK｜${warehouse}｜${category}｜${route}｜${title}`;
 }
 
 function normalizeWarehouseName(warehouse) {
-  return warehouse === "田島倉庫" || warehouse === "田島の倉庫" ? "タジミ倉庫" : warehouse;
+  return warehouse === "田島倉庫" || warehouse === "田島の倉庫" || warehouse === "タジミ倉庫" || warehouse === "多治見倉庫"
+    ? "多治見の倉庫"
+    : warehouse;
 }
 
 function parseStockTitle(title) {
   const parts = String(title || "").split("｜");
   if (parts[0] !== "STOCK") return null;
+  const hasRoute = parts[3] === "review" || parts[3] === "stock";
   return {
     warehouse: normalizeWarehouseName(parts[1] || WAREHOUSES[0].name),
     category: parts[2] || CATEGORIES[0],
-    label: parts.slice(3).join("｜") || "PHOTO",
+    route: hasRoute ? parts[3] : "stock",
+    label: parts.slice(hasRoute ? 4 : 3).join("｜") || "PHOTO",
   };
+}
+
+function isStockItem(item) {
+  return Boolean(parseStockTitle(item.title)) || item.status === "stock";
+}
+
+function isReviewItem(item) {
+  const stockInfo = parseStockTitle(item.title);
+  if (stockInfo?.route === "review") return item.status === "sent" || item.status === "registered";
+  return !stockInfo && (item.status === "sent" || item.status === "registered");
 }
 
 async function loadCloudItems() {
   if (isSyncBusy()) return;
+  if (state.screen === "pricing" && pricingGrid.contains(document.activeElement)) return;
 
   const { data, error } = await supabaseClient
     .from("inventory_items")
@@ -531,7 +570,7 @@ async function sendRecentUploadsToStock(warehouse, category) {
       recentItems.map((item) =>
         persistItem(item, {
           title: makeStockTitle(warehouse, category, item.title),
-          status: "stock",
+          status: "sent",
           price: "",
         }),
       ),
@@ -578,10 +617,8 @@ function markPricingAsSent() {
 
 function renderHomeStatus() {
   const waitingCount = state.items.filter((item) => item.status === "waiting").length;
-  const sentCount = state.items.filter((item) => item.status === "sent").length;
-  const registeredCount = state.items.filter((item) => item.status === "registered").length;
-  const reviewCount = sentCount + registeredCount;
-  const stockCount = state.items.filter((item) => item.status === "stock").length;
+  const reviewCount = state.items.filter((item) => isReviewItem(item)).length;
+  const stockCount = state.items.filter((item) => isStockItem(item)).length;
 
   pricingStatus.textContent = waitingCount ? `${waitingCount}件あり` : "待機中";
   receivedStatus.textContent = reviewCount ? `${reviewCount}件届いています` : "通知なし";
@@ -589,15 +626,18 @@ function renderHomeStatus() {
   pricingStatus.closest(".home-card").classList.toggle("has-motion", waitingCount > 0);
   receivedStatus.closest(".home-card").classList.toggle("has-motion", reviewCount > 0);
 
-  progressPricingCount.textContent = waitingCount;
-  progressReviewCount.textContent = reviewCount;
-  progressStockCount.textContent = stockCount;
-  updateProgressCard(progressPricingCard, waitingCount, state.seenProgress.waiting);
-  updateProgressCard(progressReviewCard, reviewCount, state.seenProgress.review);
-  updateProgressCard(progressStockCard, stockCount, state.seenProgress.stock);
+  if (progressPricingCount) {
+    progressPricingCount.textContent = waitingCount;
+    progressReviewCount.textContent = reviewCount;
+    progressStockCount.textContent = stockCount;
+    updateProgressCard(progressPricingCard, waitingCount, state.seenProgress.waiting);
+    updateProgressCard(progressReviewCard, reviewCount, state.seenProgress.review);
+    updateProgressCard(progressStockCard, stockCount, state.seenProgress.stock);
+  }
 }
 
 function updateProgressCard(card, count, seenCount) {
+  if (!card) return;
   const hasNew = count > seenCount;
   card.classList.toggle("has-new", hasNew);
   card.classList.toggle("is-muted", !hasNew);
@@ -633,7 +673,7 @@ function renderInventory() {
     CATEGORIES.forEach((category, index) => {
       const count = state.items.filter((item) => {
         const stock = parseStockTitle(item.title);
-        return item.status === "stock" && stock?.warehouse === state.inventoryWarehouse && stock?.category === category;
+        return isStockItem(item) && stock?.warehouse === state.inventoryWarehouse && stock?.category === category;
       }).length;
       const button = document.createElement("button");
       button.className = "pill-button category-button";
@@ -653,14 +693,14 @@ function renderInventory() {
 
     const stockItems = state.items.filter((item) => {
       const stock = parseStockTitle(item.title);
-      return item.status === "stock" && stock?.warehouse === state.inventoryWarehouse && stock?.category === state.inventoryCategory;
+      return isStockItem(item) && stock?.warehouse === state.inventoryWarehouse && stock?.category === state.inventoryCategory;
     });
     renderGrid(inventoryGrid, stockItems, "stock", "このカテゴリの在庫写真はありません。");
     return;
   }
 
   WAREHOUSES.forEach((warehouse) => {
-    const count = state.items.filter((item) => item.status === "stock" && parseStockTitle(item.title)?.warehouse === warehouse.name).length;
+    const count = state.items.filter((item) => isStockItem(item) && parseStockTitle(item.title)?.warehouse === warehouse.name).length;
     const button = document.createElement("button");
     button.className = "pill-button warehouse-button";
     button.type = "button";
@@ -686,11 +726,12 @@ function renderPricing() {
   const waitingItems = state.items.filter((item) => item.status === "waiting");
   sendAllButton.hidden = waitingItems.length === 0;
   sendAllButton.disabled = false;
+  sendAllButton.textContent = "一括で完了";
   renderGrid(pricingGrid, waitingItems, "pricing", "金額待ちの写真はありません。");
 }
 
 function renderReceived() {
-  const reviewItems = state.items.filter((item) => item.status === "sent" || item.status === "registered");
+  const reviewItems = state.items.filter((item) => isReviewItem(item));
   noticeBar.hidden = reviewItems.length === 0;
   clearReceivedButton.hidden = reviewItems.length === 0;
   clearReceivedButton.disabled = state.isClearingReview;
@@ -714,6 +755,52 @@ function renderGrid(container, items, mode, emptyText) {
   items.forEach((item) => container.append(renderItem(item, mode)));
 }
 
+function readPricingCard(card) {
+  const item = state.items.find((candidate) => candidate.id === card.dataset.itemId);
+  if (!item) return null;
+  const entry = {
+    item,
+    card,
+    price: card.querySelector(".price-input")?.value.trim() || "",
+    destination: card.querySelector(".destination-select")?.value || "review",
+    category: card.querySelector(".stock-category-select")?.value || CATEGORIES[0],
+  };
+  updatePricingDraft(item.id, {
+    price: entry.price,
+    destination: entry.destination,
+    category: entry.category,
+  });
+  return entry;
+}
+
+function makePricingFields(item, price, destination, category) {
+  const stockInfo = parseStockTitle(item.title);
+  const sendToStock = destination === "stock";
+  const sentAt = new Date().toISOString();
+  return {
+    title: makeStockTitle(WAREHOUSES[0].name, category, sendToStock ? "stock" : "review", stockInfo?.label || item.title),
+    price,
+    status: "sent",
+    sentAt: sendToStock ? "" : sentAt,
+  };
+}
+
+function getPricingDraft(item) {
+  return {
+    price: item.price || "",
+    destination: "review",
+    category: CATEGORIES[0],
+    ...(state.pricingDrafts.get(item.id) || {}),
+  };
+}
+
+function updatePricingDraft(itemId, fields) {
+  state.pricingDrafts.set(itemId, {
+    ...(state.pricingDrafts.get(itemId) || {}),
+    ...fields,
+  });
+}
+
 function renderItem(item, mode) {
   const card = photoTemplate.content.firstElementChild.cloneNode(true);
   const image = card.querySelector("img");
@@ -721,6 +808,9 @@ function renderItem(item, mode) {
   const badge = card.querySelector(".status-badge");
   const priceRow = card.querySelector(".price-row");
   const priceInput = card.querySelector(".price-input");
+  const destinationSelect = card.querySelector(".destination-select");
+  const categoryField = card.querySelector(".stock-category-field");
+  const categorySelect = card.querySelector(".stock-category-select");
   const sendButton = card.querySelector(".send-price-button");
   const receivedPrice = card.querySelector(".received-price");
   const reviewCheck = card.querySelector(".review-check");
@@ -728,46 +818,72 @@ function renderItem(item, mode) {
   const deleteButton = card.querySelector(".delete-button");
   const time = card.querySelector("time");
 
+  card.dataset.itemId = item.id;
   image.src = item.photo;
   image.alt = `${item.title} の写真`;
   const stockInfo = parseStockTitle(item.title);
   title.textContent = stockInfo?.label || item.title;
   priceInput.value = item.price || "";
+  if (categorySelect) {
+    categorySelect.innerHTML = CATEGORIES.map((category) => `<option value="${category}">${category}</option>`).join("");
+  }
   time.dateTime = item.createdAt;
   time.textContent = formatDate(item.status === "sent" ? item.sentAt : item.createdAt);
 
   if (mode === "pricing") {
+    const draft = getPricingDraft(item);
+    priceInput.value = draft.price;
+    destinationSelect.value = draft.destination;
+    categorySelect.value = draft.category;
     badge.textContent = "Ready";
     receivedPrice.hidden = true;
     reviewCheck.hidden = true;
     deleteButton.hidden = true;
+    categoryField.hidden = false;
+    destinationSelect.addEventListener("change", () => {
+      updatePricingDraft(item.id, { destination: destinationSelect.value });
+    });
+    categorySelect.addEventListener("change", () => {
+      updatePricingDraft(item.id, { category: categorySelect.value });
+    });
     card.classList.toggle("is-missing", state.missingPriceIds.has(item.id));
     sendButton.addEventListener("click", () => {
-      const price = priceInput.value.trim();
-      if (!price) {
+      const entry = readPricingCard(card);
+      if (!entry?.price) {
         state.missingPriceIds.add(item.id);
         card.classList.add("is-missing");
         priceInput.focus();
         return;
       }
-      item.price = price;
-      item.status = "sent";
-      item.sentAt = new Date().toISOString();
+      const sendToStock = entry.destination === "stock";
+      const fields = makePricingFields(item, entry.price, entry.destination, entry.category);
       state.missingPriceIds.delete(item.id);
       sendButton.textContent = "Sent";
       sendButton.disabled = true;
-      persistItem(item, { price: item.price, status: item.status, sentAt: item.sentAt }).catch(console.error);
+      persistItem(item, fields)
+        .then(() => {
+          state.pricingDrafts.delete(item.id);
+          state.items = state.items.filter((candidate) => candidate.id !== item.id);
+          state.items.unshift(item);
+          render();
+        })
+        .catch(console.error);
       renderHomeStatus();
       card.classList.add("is-registered");
       priceInput.disabled = true;
+      destinationSelect.disabled = true;
+      categorySelect.disabled = true;
       badge.textContent = "Sent";
       badge.classList.add("is-priced");
-      sendFeedback.textContent = `${item.title} を送信しました。戻るでトップへ戻れます。`;
+      sendFeedback.textContent = sendToStock
+        ? `${entry.category} として在庫に入れました。`
+        : `${item.title} をReviewへ送信しました。`;
       sendFeedback.hidden = false;
     });
 
     priceInput.addEventListener("input", () => {
       item.price = priceInput.value.trim();
+      updatePricingDraft(item.id, { price: item.price });
       if (item.price) {
         state.missingPriceIds.delete(item.id);
         card.classList.remove("is-missing");
@@ -790,6 +906,8 @@ function renderItem(item, mode) {
     card.classList.toggle("is-registered", isRegistered);
     card.classList.toggle("is-unchecked", state.uncheckedReviewIds.has(item.id));
     priceRow.hidden = true;
+    if (destinationSelect) destinationSelect.hidden = true;
+    if (categoryField) categoryField.hidden = true;
     deleteButton.hidden = false;
     deleteButton.disabled = false;
     receivedPrice.hidden = false;
@@ -821,17 +939,23 @@ function renderItem(item, mode) {
   }
 
   if (mode === "stock") {
-    badge.textContent = stockInfo?.category || "在庫";
+    badge.textContent = stockInfo?.route === "review" ? "Review" : "在庫";
     badge.classList.add("is-priced");
     priceRow.hidden = true;
+    if (destinationSelect) destinationSelect.hidden = true;
+    if (categoryField) categoryField.hidden = true;
     receivedPrice.hidden = false;
-    receivedPrice.textContent = stockInfo?.warehouse || "在庫";
+    receivedPrice.textContent = item.price ? `¥${Number(item.price).toLocaleString("ja-JP")}` : "価格未入力";
+    time.textContent = stockInfo?.warehouse || "在庫";
     reviewCheck.hidden = true;
     deleteButton.hidden = false;
     deleteButton.disabled = false;
   }
 
   deleteButton.addEventListener("click", async () => {
+    const label = stockInfo?.label || item.title;
+    if (!confirm(`${label} を削除してもいいですか？`)) return;
+
     deleteButton.disabled = true;
     const previousItems = [...state.items];
     state.items = state.items.filter((candidate) => candidate.id !== item.id);
