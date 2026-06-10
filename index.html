@@ -11,7 +11,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon-32.png" />
     <link rel="icon" type="image/svg+xml" href="./assets/iware-icon.svg" />
     <link rel="manifest" href="./site.webmanifest" />
-    <link rel="stylesheet" href="./styles.css?v=20260530-11" />
+    <link rel="stylesheet" href="./styles.css?v=20260611-5" />
   </head>
   <body>
     <header class="app-header">
@@ -195,7 +195,19 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./config.js?v=20260530-11"></script>
-    <script src="./app.js?v=20260530-11"></script>
+    <script>
+      if (!window.supabase) {
+        document.write('<script src="https://unpkg.com/@supabase/supabase-js@2"><\\/script>');
+      }
+    </script>
+    <script>
+      window.IWARE_CONFIG = window.IWARE_CONFIG || {
+        supabaseUrl: "https://yiooafzqdtaefimvatcq.supabase.co",
+        supabaseAnonKey: "sb_publishable_WFHcdHzUxPAYBmHlVE2RrA_LoKNY-kW",
+        photoBucket: "iware-photos",
+      };
+    </script>
+    <script src="./config.js?v=20260611-5"></script>
+    <script src="./app.js?v=20260611-5"></script>
   </body>
 </html>

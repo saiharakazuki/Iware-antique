@@ -4,12 +4,18 @@ const WAREHOUSES = [
   { name: "多治見の倉庫", image: "warehouse-photo-tajimi" },
 ];
 const CATEGORIES = ["チェア", "ソファー", "チェスターソファー", "テーブル", "キャビネット", "チェスト", "シャンデリア", "小物", "その他"];
-const config = window.IWARE_CONFIG || {};
+const DEFAULT_CONFIG = {
+  supabaseUrl: "https://yiooafzqdtaefimvatcq.supabase.co",
+  supabaseAnonKey: "sb_publishable_WFHcdHzUxPAYBmHlVE2RrA_LoKNY-kW",
+  photoBucket: "iware-photos",
+};
+const config = { ...DEFAULT_CONFIG, ...(window.IWARE_CONFIG || {}) };
 const photoBucket = config.photoBucket || "iware-photos";
 const supabaseClient =
   config.supabaseUrl &&
   config.supabaseAnonKey &&
   window.supabase?.createClient(config.supabaseUrl, config.supabaseAnonKey);
+const cloudConfigReady = Boolean(config.supabaseUrl && config.supabaseAnonKey);
 
 const state = {
   screen: "top",
@@ -24,7 +30,7 @@ const state = {
   pricingDrafts: new Map(),
   uncheckedReviewIds: new Set(),
   reviewMessage: "",
-  cloudReady: Boolean(supabaseClient),
+  cloudReady: cloudConfigReady,
   isClearingReview: false,
   isUploading: false,
   activeWrites: 0,
@@ -94,6 +100,7 @@ photoInput.addEventListener("change", async () => {
 
   const nextNumber = state.items.length + 1;
   const newItems = [];
+  let hasLocalOnlyItems = false;
   state.recentUploadIds = [];
   state.isUploading = true;
   photoInput.disabled = true;
@@ -107,20 +114,12 @@ photoInput.addEventListener("change", async () => {
     for (const [index, file] of files.entries()) {
       uploadFeedback.textContent = `${index + 1}/${files.length}枚をアップロード中...`;
 
-      const photo = await resizeImage(file);
+      const photo = await preparePhoto(file);
       const title = `PHOTO ${String(nextNumber + index).padStart(3, "0")}`;
-      const item = state.cloudReady
-        ? await uploadCloudItem(file, photo, title)
-        : {
-            id: crypto.randomUUID(),
-            title,
-            photo,
-            price: "",
-            status: "waiting",
-            createdAt: new Date().toISOString(),
-          };
+      const item = state.cloudReady ? await uploadCloudItemWithFallback(file, photo, title) : createLocalItem(title, photo);
 
       newItems.unshift(item);
+      hasLocalOnlyItems = hasLocalOnlyItems || Boolean(item.localOnly);
       state.recentUploadIds.unshift(item.id);
       state.items = [item, ...state.items];
       renderUploadPreview(newItems);
@@ -129,7 +128,9 @@ photoInput.addEventListener("change", async () => {
     }
 
     photoInput.value = "";
-    uploadFeedback.textContent = `${newItems.length}枚アップロードしました。Pricingで金額を入れてください。`;
+    uploadFeedback.textContent = hasLocalOnlyItems
+      ? `${newItems.length}枚をこの端末に一時保存しました。保存先が戻るまで、この端末でPricingへ進めてください。`
+      : `${newItems.length}枚アップロードしました。Pricingで金額を入れてください。`;
     uploadFeedback.hidden = false;
     uploadCompleteButton.hidden = false;
     renderUploadPreview(newItems);
@@ -139,7 +140,7 @@ photoInput.addEventListener("change", async () => {
     console.error(error);
     uploadFeedback.textContent = newItems.length
       ? `${newItems.length}枚は保存できました。残りはもう一度試してください。`
-      : "アップロードに失敗しました。通信状態を確認してもう一度試してください。";
+      : getUploadErrorMessage(error);
     uploadFeedback.hidden = false;
   } finally {
     state.isUploading = false;
@@ -306,8 +307,8 @@ function loadLocalItems() {
 }
 
 function saveItems() {
-  if (state.cloudReady) return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.items));
+  const localItems = state.cloudReady ? state.items.filter((item) => item.localOnly) : state.items;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(localItems));
 }
 
 function normalizeItem(item, index) {
@@ -363,64 +364,214 @@ async function loadCloudItems() {
   if (isSyncBusy()) return;
   if (state.screen === "pricing" && pricingGrid.contains(document.activeElement)) return;
 
-  const { data, error } = await supabaseClient
-    .from("inventory_items")
-    .select("*")
-    .order("created_at", { ascending: false });
+  const { data, error } = supabaseClient
+    ? await supabaseClient.from("inventory_items").select("*").order("created_at", { ascending: false })
+    : await supabaseRequest("/rest/v1/inventory_items?select=*&order=created_at.desc");
 
   if (error) {
     console.error(error);
     return;
   }
 
-  state.items = data.map(fromCloudItem);
+  const localOnlyItems = state.items.filter((item) => item.localOnly);
+  state.items = [...localOnlyItems, ...data.map(fromCloudItem)];
   render();
 }
 
 async function uploadCloudItem(file, photo, title, status = "waiting") {
   return withRemoteWrite(async () => {
-    const photoPath = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.jpg`;
-    const resizedBlob = await dataUrlToBlob(photo);
-    const uploadResult = await supabaseClient.storage.from(photoBucket).upload(photoPath, resizedBlob, {
-      contentType: "image/jpeg",
-    });
+    const hasResizedPhoto = Boolean(photo);
+    const extension = hasResizedPhoto ? "jpg" : getFileExtension(file);
+    const photoPath = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.${extension}`;
+    const uploadBody = hasResizedPhoto ? await dataUrlToBlob(photo) : file;
+    const contentType = hasResizedPhoto ? "image/jpeg" : file.type || "application/octet-stream";
+    const uploadResult = supabaseClient
+      ? await supabaseClient.storage.from(photoBucket).upload(photoPath, uploadBody, { contentType })
+      : await uploadStorageObject(photoPath, uploadBody, contentType);
 
     if (uploadResult.error) throw uploadResult.error;
 
-    const { data: publicUrlData } = supabaseClient.storage.from(photoBucket).getPublicUrl(photoPath);
-    const { data, error } = await supabaseClient
-      .from("inventory_items")
-      .insert({
-        title,
-        photo_url: publicUrlData.publicUrl,
-        photo_path: photoPath,
-        status,
-      })
-      .select()
-      .single();
+    const publicUrl = supabaseClient
+      ? supabaseClient.storage.from(photoBucket).getPublicUrl(photoPath).data.publicUrl
+      : getPublicPhotoUrl(photoPath);
+    const { data, error } = supabaseClient
+      ? await supabaseClient
+          .from("inventory_items")
+          .insert({
+            title,
+            photo_url: publicUrl,
+            photo_path: photoPath,
+            status,
+          })
+          .select()
+          .single()
+      : await supabaseRequest("/rest/v1/inventory_items", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Prefer: "return=representation",
+          },
+          body: JSON.stringify({
+            title,
+            photo_url: publicUrl,
+            photo_path: photoPath,
+            status,
+          }),
+        });
 
     if (error) throw error;
-    return fromCloudItem(data);
+    return fromCloudItem(Array.isArray(data) ? data[0] : data);
   });
 }
 
+async function uploadCloudItemWithFallback(file, photo, title) {
+  try {
+    return await uploadCloudItem(file, photo, title);
+  } catch (error) {
+    console.error(error);
+    const localPhoto = photo || (await fileToDataUrl(file));
+    const item = createLocalItem(title, localPhoto);
+    item.syncError = getUploadErrorMessage(error);
+    item.localOnly = true;
+    uploadFeedback.textContent = "保存先に接続できないため、この端末に一時保存しました。Pricingには進めます。";
+    uploadFeedback.hidden = false;
+    return item;
+  }
+}
+
+function createLocalItem(title, photo) {
+  return {
+    id: crypto.randomUUID(),
+    title,
+    photo,
+    price: "",
+    status: "waiting",
+    createdAt: new Date().toISOString(),
+    localOnly: true,
+  };
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("写真を読み込めませんでした。"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadStorageObject(photoPath, body, contentType) {
+  const response = await fetch(`${config.supabaseUrl}/storage/v1/object/${photoBucket}/${photoPath}`, {
+    method: "POST",
+    headers: {
+      ...supabaseHeaders(),
+      "Content-Type": contentType,
+    },
+    body,
+  });
+  if (!response.ok) {
+    return { error: new Error(await response.text()) };
+  }
+  return { data: await response.json().catch(() => ({})), error: null };
+}
+
+function getPublicPhotoUrl(photoPath) {
+  return `${config.supabaseUrl}/storage/v1/object/public/${photoBucket}/${photoPath}`;
+}
+
+async function supabaseRequest(path, options = {}) {
+  const response = await fetch(`${config.supabaseUrl}${path}`, {
+    ...options,
+    headers: {
+      ...supabaseHeaders(),
+      ...(options.headers || {}),
+    },
+  });
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!response.ok) {
+    return { data: null, error: new Error(text || response.statusText) };
+  }
+  return { data, error: null };
+}
+
+function supabaseHeaders() {
+  return {
+    apikey: config.supabaseAnonKey,
+    Authorization: `Bearer ${config.supabaseAnonKey}`,
+  };
+}
+
+async function preparePhoto(file) {
+  try {
+    return await resizeImage(file);
+  } catch (error) {
+    if (state.cloudReady) {
+      console.warn("写真を圧縮できないため、原本のまま保存します。", error);
+      return "";
+    }
+    throw error;
+  }
+}
+
+function getFileExtension(file) {
+  const nameExtension = file.name?.split(".").pop()?.toLowerCase();
+  if (nameExtension && nameExtension.length <= 5) return nameExtension;
+  if (file.type === "image/png") return "png";
+  if (file.type === "image/webp") return "webp";
+  if (file.type === "image/heic" || file.type === "image/heif") return "heic";
+  return "jpg";
+}
+
+function getUploadErrorMessage(error) {
+  const message = String(error?.message || "");
+  if (message.includes("Failed to fetch") || message.includes("NetworkError")) {
+    return "保存先に接続できません。電波を確認してもう一度試してください。";
+  }
+  if (message.includes("読み込めません")) {
+    return "この写真形式を読み込めません。別の写真、またはスクリーンショットで試してください。";
+  }
+  return "アップロードに失敗しました。通信状態を確認してもう一度試してください。";
+}
+
 async function updateCloudItem(item, fields) {
-  if (!state.cloudReady) return;
-  const { error } = await supabaseClient.from("inventory_items").update(toCloudFields(fields)).eq("id", item.id);
+  if (!state.cloudReady || item.localOnly) return;
+  const { error } = supabaseClient
+    ? await supabaseClient.from("inventory_items").update(toCloudFields(fields)).eq("id", item.id)
+    : await supabaseRequest(`/rest/v1/inventory_items?id=eq.${encodeURIComponent(item.id)}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(toCloudFields(fields)),
+      });
   if (error) throw error;
 }
 
 async function deleteCloudItems(items) {
   if (!state.cloudReady || !items.length) return;
   return withRemoteWrite(async () => {
-    const photoPaths = items.map((item) => item.photoPath).filter(Boolean);
-    const itemIds = items.map((item) => item.id);
+    const cloudItems = items.filter((item) => !item.localOnly);
+    if (!cloudItems.length) return;
+    const photoPaths = cloudItems.map((item) => item.photoPath).filter(Boolean);
+    const itemIds = cloudItems.map((item) => item.id);
 
-    const { error } = await supabaseClient.from("inventory_items").delete().in("id", itemIds);
+    const idList = itemIds.map((id) => `"${id}"`).join(",");
+    const { error } = supabaseClient
+      ? await supabaseClient.from("inventory_items").delete().in("id", itemIds)
+      : await supabaseRequest(`/rest/v1/inventory_items?id=in.(${idList})`, { method: "DELETE" });
     if (error) throw error;
 
     if (photoPaths.length) {
-      const { error: storageError } = await supabaseClient.storage.from(photoBucket).remove(photoPaths);
+      const { error: storageError } = supabaseClient
+        ? await supabaseClient.storage.from(photoBucket).remove(photoPaths)
+        : await supabaseRequest(`/storage/v1/object/${photoBucket}`, {
+            method: "DELETE",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ prefixes: photoPaths }),
+          });
       if (storageError) console.warn(storageError);
     }
   });
