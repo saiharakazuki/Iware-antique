@@ -11,7 +11,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon-32.png" />
     <link rel="icon" type="image/svg+xml" href="./assets/iware-icon.svg" />
     <link rel="manifest" href="./site.webmanifest" />
-    <link rel="stylesheet" href="./styles.css?v=20260611-5" />
+    <link rel="stylesheet" href="./styles.css?v=20260611-6" />
   </head>
   <body>
     <header class="app-header">
@@ -55,6 +55,15 @@
           <small>写真を入れる</small>
           <em>Photo desk</em>
         </button>
+        <section class="safety-panel" id="safetyPanel" aria-live="polite">
+          <div>
+            <span class="section-kicker">Data safety</span>
+            <strong id="safetyStatusText">保存状態を確認中</strong>
+          </div>
+          <span class="unsynced-count" id="unsyncedCount">未同期 0件</span>
+          <button class="sync-button" id="syncLocalButton" type="button" hidden>未同期を再送</button>
+          <button class="backup-button" id="exportBackupButton" type="button">バックアップを書き出す</button>
+        </section>
       </section>
 
       <section class="home-screen" id="homeScreen" hidden>
@@ -207,7 +216,7 @@
         photoBucket: "iware-photos",
       };
     </script>
-    <script src="./config.js?v=20260611-5"></script>
-    <script src="./app.js?v=20260611-5"></script>
+    <script src="./config.js?v=20260611-6"></script>
+    <script src="./app.js?v=20260611-6"></script>
   </body>
 </html>

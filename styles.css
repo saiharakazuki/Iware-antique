@@ -369,6 +369,52 @@ main {
   -webkit-tap-highlight-color: transparent;
 }
 
+.safety-panel {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 14px;
+  background: rgba(17, 17, 17, 0.78);
+  border: 1px solid var(--line);
+}
+
+.safety-panel strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.unsynced-count {
+  justify-self: end;
+  padding: 6px 8px;
+  color: var(--gold);
+  background: rgba(214, 188, 137, 0.08);
+  border: 1px solid rgba(214, 188, 137, 0.24);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.sync-button,
+.backup-button {
+  min-height: 42px;
+  padding: 0 12px;
+  color: var(--gold);
+  background: rgba(214, 188, 137, 0.06);
+  border: 1px solid var(--line-strong);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.backup-button {
+  grid-column: 1 / -1;
+  justify-self: stretch;
+  color: var(--ink);
+  border-color: var(--line);
+}
+
 .upload-box input {
   display: none;
 }
@@ -962,6 +1008,14 @@ time {
   .upload-actions,
   .category-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .safety-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .unsynced-count {
+    justify-self: start;
   }
 
   .upload-route-panel {

@@ -31,6 +31,7 @@ const state = {
   uncheckedReviewIds: new Set(),
   reviewMessage: "",
   cloudReady: cloudConfigReady,
+  cloudIssue: "",
   isClearingReview: false,
   isUploading: false,
   activeWrites: 0,
@@ -74,10 +75,20 @@ const clearReceivedButton = document.querySelector("#clearReceivedButton");
 const sendAllButton = document.querySelector("#sendAllButton");
 const sendFeedback = document.querySelector("#sendFeedback");
 const reviewFeedback = document.querySelector("#reviewFeedback");
+const safetyStatusText = document.querySelector("#safetyStatusText");
+const unsyncedCount = document.querySelector("#unsyncedCount");
+const syncLocalButton = document.querySelector("#syncLocalButton");
+const exportBackupButton = document.querySelector("#exportBackupButton");
 
 homeButton.addEventListener("click", () => {
   setScreen("top");
 });
+
+syncLocalButton?.addEventListener("click", () => {
+  syncLocalOnlyItems().catch(console.error);
+});
+
+exportBackupButton?.addEventListener("click", exportInventoryBackup);
 
 document.querySelectorAll("[data-screen]").forEach((button) => {
   button.dataset.boundClick = "true";
@@ -232,13 +243,15 @@ clearReceivedButton.addEventListener("click", async () => {
     }
   });
 
-  const deletedIds = new Set(legacyReviewItems.map((item) => item.id));
+  legacyReviewItems.forEach((item) => {
+    item.status = "archived";
+    item.registeredAt = new Date().toISOString();
+  });
   stockReviewItems.forEach(({ item, stockInfo }) => {
     item.title = makeStockTitle(stockInfo.warehouse, stockInfo.category, "stock", stockInfo.label);
     item.status = "sent";
     item.registeredAt = "";
   });
-  state.items = state.items.filter((item) => !deletedIds.has(item.id));
   state.uncheckedReviewIds.clear();
   state.reviewMessage = "Reviewを完了しました。在庫リストには残っています。";
   saveItems();
@@ -246,15 +259,22 @@ clearReceivedButton.addEventListener("click", async () => {
 
   try {
     await Promise.all(
-      stockReviewItems.map(({ item }) =>
-        persistItem(item, {
-          title: item.title,
-          status: item.status,
-          registeredAt: item.registeredAt,
-        }),
-      ),
+      [
+        ...stockReviewItems.map(({ item }) =>
+          persistItem(item, {
+            title: item.title,
+            status: item.status,
+            registeredAt: item.registeredAt,
+          }),
+        ),
+        ...legacyReviewItems.map((item) =>
+          persistItem(item, {
+            status: item.status,
+            registeredAt: item.registeredAt,
+          }),
+        ),
+      ],
     );
-    await deleteCloudItems(legacyReviewItems);
   } catch (error) {
     console.error(error);
     state.reviewMessage = "画面は更新しました。通信が弱い場合は再読み込みして確認してください。";
@@ -288,7 +308,7 @@ function saveSeenProgress() {
 }
 
 function markProgressSeen(screen) {
-  const waitingCount = state.items.filter((item) => item.status === "waiting").length;
+  const waitingCount = state.items.filter((item) => item.status === "waiting" && !isArchivedItem(item)).length;
   const reviewCount = state.items.filter((item) => isReviewItem(item)).length;
   const stockCount = state.items.filter((item) => isStockItem(item)).length;
 
@@ -323,6 +343,8 @@ function normalizeItem(item, index) {
     createdAt: item.createdAt || new Date().toISOString(),
     sentAt: item.sentAt || (hasPrice ? item.createdAt : ""),
     registeredAt: item.registeredAt || "",
+    localOnly: Boolean(item.localOnly),
+    syncError: item.syncError || "",
   };
 }
 
@@ -350,11 +372,17 @@ function parseStockTitle(title) {
   };
 }
 
+function isArchivedItem(item) {
+  return item.status === "archived";
+}
+
 function isStockItem(item) {
+  if (isArchivedItem(item)) return false;
   return Boolean(parseStockTitle(item.title)) || item.status === "stock";
 }
 
 function isReviewItem(item) {
+  if (isArchivedItem(item)) return false;
   const stockInfo = parseStockTitle(item.title);
   if (stockInfo?.route === "review") return item.status === "sent" || item.status === "registered";
   return !stockInfo && (item.status === "sent" || item.status === "registered");
@@ -370,10 +398,13 @@ async function loadCloudItems() {
 
   if (error) {
     console.error(error);
+    state.cloudIssue = "保存先に接続できません。未同期はこの端末に保管中です。";
+    renderHomeStatus();
     return;
   }
 
   const localOnlyItems = state.items.filter((item) => item.localOnly);
+  state.cloudIssue = "";
   state.items = [...localOnlyItems, ...data.map(fromCloudItem)];
   render();
 }
@@ -424,6 +455,88 @@ async function uploadCloudItem(file, photo, title, status = "waiting") {
   });
 }
 
+async function uploadExistingLocalItem(item) {
+  return withRemoteWrite(async () => {
+    const photoBlob = await dataUrlToBlob(item.photo);
+    const extension = photoBlob.type === "image/png" ? "png" : photoBlob.type === "image/webp" ? "webp" : "jpg";
+    const photoPath = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.${extension}`;
+    const contentType = photoBlob.type || "image/jpeg";
+    const uploadResult = supabaseClient
+      ? await supabaseClient.storage.from(photoBucket).upload(photoPath, photoBlob, { contentType })
+      : await uploadStorageObject(photoPath, photoBlob, contentType);
+
+    if (uploadResult.error) throw uploadResult.error;
+
+    const publicUrl = supabaseClient
+      ? supabaseClient.storage.from(photoBucket).getPublicUrl(photoPath).data.publicUrl
+      : getPublicPhotoUrl(photoPath);
+    const payload = {
+      title: item.title,
+      photo_url: publicUrl,
+      photo_path: photoPath,
+      price: item.price || null,
+      status: item.status,
+      sent_at: item.sentAt || null,
+      registered_at: item.registeredAt || null,
+    };
+    const { data, error } = supabaseClient
+      ? await supabaseClient.from("inventory_items").insert(payload).select().single()
+      : await supabaseRequest("/rest/v1/inventory_items", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Prefer: "return=representation",
+          },
+          body: JSON.stringify(payload),
+        });
+
+    if (error) throw error;
+    return fromCloudItem(Array.isArray(data) ? data[0] : data);
+  });
+}
+
+async function syncLocalOnlyItems() {
+  const localItems = state.items.filter((item) => item.localOnly && !isArchivedItem(item));
+  if (!localItems.length) return;
+
+  syncLocalButton.disabled = true;
+  syncLocalButton.textContent = "再送中...";
+  state.cloudIssue = "";
+  renderHomeStatus();
+
+  let syncedCount = 0;
+  let failedCount = 0;
+
+  for (const item of localItems) {
+    try {
+      const syncedItem = await uploadExistingLocalItem(item);
+      const index = state.items.findIndex((candidate) => candidate.id === item.id);
+      if (index >= 0) {
+        state.items.splice(index, 1, syncedItem);
+      }
+      syncedCount += 1;
+      saveItems();
+      render();
+    } catch (error) {
+      console.error(error);
+      item.syncError = getUploadErrorMessage(error);
+      failedCount += 1;
+    }
+  }
+
+  if (failedCount) {
+    state.cloudIssue = `${failedCount}件を再送できませんでした。通信状態を確認してください。`;
+  } else {
+    state.cloudIssue = "";
+  }
+  saveItems();
+  render();
+  syncLocalButton.textContent = "未同期を再送";
+  if (syncedCount && !failedCount) {
+    alert(`${syncedCount}件を保存先に同期しました。`);
+  }
+}
+
 async function uploadCloudItemWithFallback(file, photo, title) {
   try {
     return await uploadCloudItem(file, photo, title);
@@ -433,6 +546,7 @@ async function uploadCloudItemWithFallback(file, photo, title) {
     const item = createLocalItem(title, localPhoto);
     item.syncError = getUploadErrorMessage(error);
     item.localOnly = true;
+    state.cloudIssue = "保存先に接続できません。未同期はこの端末に保管中です。";
     uploadFeedback.textContent = "保存先に接続できないため、この端末に一時保存しました。Pricingには進めます。";
     uploadFeedback.hidden = false;
     return item;
@@ -746,6 +860,30 @@ function renderUploadPreview(items) {
   });
 }
 
+function exportInventoryBackup() {
+  const exportedAt = new Date().toISOString();
+  const backup = {
+    app: "IWARE antique",
+    version: 2,
+    exportedAt,
+    warehouses: WAREHOUSES.map((warehouse) => warehouse.name),
+    categories: CATEGORIES,
+    items: state.items,
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `iware-antique-backup-${exportedAt.slice(0, 10)}.json`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  if (safetyStatusText) {
+    safetyStatusText.textContent = "バックアップを書き出しました。";
+  }
+}
+
 function markPricingAsSent() {
   pricingGrid.querySelectorAll(".item-card").forEach((card) => {
     card.classList.add("is-registered");
@@ -767,9 +905,10 @@ function markPricingAsSent() {
 }
 
 function renderHomeStatus() {
-  const waitingCount = state.items.filter((item) => item.status === "waiting").length;
+  const waitingCount = state.items.filter((item) => item.status === "waiting" && !isArchivedItem(item)).length;
   const reviewCount = state.items.filter((item) => isReviewItem(item)).length;
   const stockCount = state.items.filter((item) => isStockItem(item)).length;
+  const localOnlyCount = state.items.filter((item) => item.localOnly && !isArchivedItem(item)).length;
 
   pricingStatus.textContent = waitingCount ? `${waitingCount}件あり` : "待機中";
   receivedStatus.textContent = reviewCount ? `${reviewCount}件届いています` : "通知なし";
@@ -784,6 +923,19 @@ function renderHomeStatus() {
     updateProgressCard(progressPricingCard, waitingCount, state.seenProgress.waiting);
     updateProgressCard(progressReviewCard, reviewCount, state.seenProgress.review);
     updateProgressCard(progressStockCard, stockCount, state.seenProgress.stock);
+  }
+
+  if (safetyStatusText && unsyncedCount && syncLocalButton) {
+    unsyncedCount.textContent = `未同期 ${localOnlyCount}件`;
+    syncLocalButton.hidden = localOnlyCount === 0;
+    syncLocalButton.disabled = state.activeWrites > 0;
+    if (localOnlyCount) {
+      safetyStatusText.textContent = state.cloudIssue || "この端末に未同期の写真があります。";
+    } else if (state.cloudIssue) {
+      safetyStatusText.textContent = state.cloudIssue;
+    } else {
+      safetyStatusText.textContent = "保存先と同期済みです。";
+    }
   }
 }
 
@@ -874,7 +1026,7 @@ function renderInventory() {
 }
 
 function renderPricing() {
-  const waitingItems = state.items.filter((item) => item.status === "waiting");
+  const waitingItems = state.items.filter((item) => item.status === "waiting" && !isArchivedItem(item));
   sendAllButton.hidden = waitingItems.length === 0;
   sendAllButton.disabled = false;
   sendAllButton.textContent = "一括で完了";
@@ -1105,20 +1257,27 @@ function renderItem(item, mode) {
 
   deleteButton.addEventListener("click", async () => {
     const label = stockInfo?.label || item.title;
-    if (!confirm(`${label} を削除してもいいですか？`)) return;
+    if (!confirm(`${label} を一覧から外しますか？\n写真データはすぐには完全削除せず、復旧できる状態で保管します。`)) return;
 
     deleteButton.disabled = true;
-    const previousItems = [...state.items];
-    state.items = state.items.filter((candidate) => candidate.id !== item.id);
+    const previousStatus = item.status;
+    const previousRegisteredAt = item.registeredAt;
+    item.status = "archived";
+    item.registeredAt = new Date().toISOString();
     saveItems();
     render();
 
     try {
-      await deleteCloudItems([item]);
+      await persistItem(item, {
+        status: item.status,
+        registeredAt: item.registeredAt,
+      });
     } catch (error) {
       console.error(error);
-      state.items = previousItems;
+      item.status = previousStatus;
+      item.registeredAt = previousRegisteredAt;
       state.reviewMessage = "削除に失敗しました。もう一度押してください。";
+      saveItems();
       render();
     }
   });
